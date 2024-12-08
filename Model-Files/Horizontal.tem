@@ -1,0 +1,42 @@
+//Horizontal Cell Template
+
+begintemplate Horizontal
+
+public soma
+create soma
+
+proc init() { local x, y, z
+	create soma
+	if (numarg() == 3) {
+		x = $1*2
+		y = $2*2
+		z = $3
+	} else {
+		x = 0
+		y = 0
+		z = 0
+	}
+	
+	soma {
+		L = 10
+		{pt3dclear() pt3dadd(x, y, z+L , 1) pt3dadd(x, y, z, 1)}
+		diam = 10
+		nseg = 9
+		
+		insert Hor_INa
+		insert Hor_ICa
+		insert Hor_IKv
+		insert Hor_IA
+		insert Hor_IKa
+		insert Hor_Il
+		ena = 55
+        ek = -80
+        el = -80
+        Ra = 160
+        cm = 1
+
+	}
+
+}
+
+endtemplate Horizontal

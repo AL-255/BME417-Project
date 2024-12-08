@@ -1,0 +1,40 @@
+
+begintemplate Bip
+
+public soma 
+create soma
+  
+  proc init() { local x, y, z
+    create soma
+	if (numarg() == 3) {
+		x = $1*2
+		y = $2*2
+		z = $3
+	} else {
+		x = 0
+		y = 0
+		z = 0
+	}
+
+    soma {
+		L=10
+		{ pt3dclear() pt3dadd(x, y, z, 1) pt3dadd(x, y, z+17, 1) }
+		diam=10 
+		nseg=9
+		
+		insert pas
+		e_pas=-41
+		g_pas=.0077
+		insert ih
+		insert cad
+		depth_cad = 0.025
+		taur_cad=0.8
+		insert tsbp
+		insert IA
+		insert IKv
+		ek_IKv = -58
+
+    }
+  }	// end init()
+
+endtemplate Bip

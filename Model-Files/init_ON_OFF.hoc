@@ -1,0 +1,38 @@
+load_file("nrngui.hoc")
+load_file("Create_random_ON_OFF_Cells.hoc")
+
+proc init() {
+	
+	finitialize()
+	fcurrent()
+	dt = Time_Step
+	
+}
+
+proc start() {
+	init()
+	Create_ON_OFF_Network_Cells()
+	Create_Gap_Junctions()
+	CountGanConnect()
+	Ganodd_Synapses()
+	Ganeven_Synapses()
+	CountBipConnect()
+	Bipodd_Synapses()
+	Bipeven_Synapses()
+	CountAmaConnect()
+	Ama_Synapses()
+	CountHorizConnect()
+	Horizon_synapses()
+	Create_Input()
+	//Create_Clamps()
+	Counting()
+	tstop = Simul_Time
+
+}
+
+start()
+record_Response()
+record_Gan_Cells()
+Check_recepfield()
+record_Matrix()
+make_GUI()

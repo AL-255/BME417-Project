@@ -1,0 +1,4 @@
+*.o
+*.stackdump
+*.dll
+x86_64/

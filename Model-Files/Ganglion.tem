@@ -1,0 +1,53 @@
+begintemplate Ganglion
+
+public soma,spiketimes, spikecount, nclist
+create soma
+objref spikecount, spiketimes
+objectvar nclist
+  
+proc init() { local x, y, z
+	create soma
+	if (numarg() == 3) {
+		x = $1*2
+		y = $2*2
+		z = $3
+	} else {
+		x = 0
+		y = 0
+		z = 0
+	}
+	
+	nclist = new List()
+	
+    spiketimes = new Vector()
+    soma {
+		{ pt3dclear() pt3dadd(x, y, z, 1) pt3dadd(x, y, z+18.8, 1) }
+		L = 25
+		diam = 25
+		nseg = 9
+		insert pas
+		e_pas = -65
+		g_pas = .00005
+		Ra = 110
+		
+		insert spike
+		gkbar_spike = 0.012
+		gabar_spike = 0.036
+		gcabar_spike = 0.0022
+		gkcbar_spike = 0.00005
+		celsius = 22
+		ena=35
+		ek=-75
+		
+		insert cad
+		depth_cad = 3 // (micron)
+		taur_cad = 10 // (ms)
+		
+		spikecount = new APCount(0.5)
+		spikecount.thresh = -30
+		spikecount.record(spiketimes)
+		
+    }
+}	// end init()
+
+endtemplate Ganglion

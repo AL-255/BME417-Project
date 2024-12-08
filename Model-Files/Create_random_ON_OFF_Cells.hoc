@@ -1,0 +1,2707 @@
+// File for creating full network model
+// Written by K. Ly, 2020 GSBME UNSW
+
+//---------------------------------------------------
+// ---------------LOAD FILES-------------------------
+//---------------------------------------------------
+
+load_file("nrngui.hoc")
+load_file("Rod.tem")
+load_file("Cone.tem")
+load_file("Horizontal.tem")
+load_file("Bip.tem")
+load_file("A2.tem")
+load_file("Ganglion.tem")
+load_file("Gap.tem")
+
+//---------------------------------------------
+// ---------------Cell Densities---------------
+//---------------------------------------------
+
+// Density of C57/BL6 Mice [Jeon 1998]
+DensityCone = 2.22
+DensityRod = 77.64
+DensityHorizontal = 0.69
+DensityBipolar = 9.14
+DensityAmacrine = 8.70
+DensityGanglion = 1.61
+
+DensityONBip = 50
+DensityOFFBip = 108
+DensityRodBip = 67
+
+DensityONGan = 1
+DensityOFFGan = 1.7
+
+DensityAII = 2.14
+
+//--------------------------------------------------------
+// ---------------Set Simualtion Parameters---------------
+//--------------------------------------------------------
+
+Time_Step = 0.01 // Integration time step
+Simul_Time = 3000
+Sample_time = 0.1 // Record dt
+
+//---------------------------------------------
+// ---------------Set Parameters---------------
+//---------------------------------------------
+
+Count = 0
+
+// TO INCREASE NETWORK SIZE, CHANGE THIS VALUE
+PRX = 30
+PRY = 30
+
+HorizontalX = int(sqrt(PRX*PRY*DensityHorizontal/(DensityCone + DensityRod)))
+HorizontalY = int(sqrt(PRX*PRY*DensityHorizontal/(DensityCone + DensityRod)))
+BipX = int(sqrt(PRX*PRY*DensityBipolar/(DensityCone + DensityRod)))
+BipY = int(sqrt(PRX*PRY*DensityBipolar/(DensityCone + DensityRod)))
+AmaX = 4 //int(sqrt(PRX*PRY*DensityAmacrine/(DensityCone + DensityRod)))
+AmaY = 4 //int(sqrt(PRX*PRY*DensityAmacrine/(DensityCone + DensityRod)))
+GanX = int(sqrt(PRX*PRY*DensityGanglion/(DensityCone + DensityRod)))
+GanY = int(sqrt(PRX*PRY*DensityGanglion/(DensityCone + DensityRod)))
+
+// 418 in PRX and PRY makes ~350 000 cells = 1 mm^2, therefore 1 unit = 2.39 micrometres [Jeon 1998]
+PRCellSpacing = 1
+HorizontalCellSpacing = PRX/HorizontalX
+BipCellSpacing = PRX/BipX
+AmaCellSpacing = PRX/AmaX
+GanCellSpacing = PRX/GanX
+
+// Modified from original JNE 2022 publication to fit Ferguson 2012 using above conversion
+// Cells flipped to produce epiretinal stimulation
+PRCellZ = 68 //0
+HorizontalCellZ = 45 //12.5
+BipCellZ = 39.5 //25
+AmaCellZ = 28 //75
+GanCellZ = 10 //100
+
+//counting variables
+NumCone = 0
+NumRod = 0
+NumHorizontal = 0
+NumTotalBip = 0
+NumONBip = 0
+NumOFFBip = 0
+NumRodBip = 0
+NumAma = 0
+NumAII = 0
+NumTotalGan = 0
+NumONGan = 0
+NumOFFGan = 0
+
+//MaxNumAmacrine = GanX*GanY
+
+MaxNumPRGapConnections = 100000000
+NumPRGapConnections = 0
+
+MaxNumAmaGapConnections = 100000000
+NumAmaGapConnections = 0
+
+MaxNumHomoAmaGapConnections = 100000000
+NumHomoAmaGapConnections = 0
+
+//Counters for Parallel Computation of Horizontal Cell Synapses
+SVCounter = 0
+TVCounter = 0
+
+//----------------------------------------------------
+// ---------------Receptive Field Sizes---------------
+//----------------------------------------------------
+
+HorizontalReceptiveField = HorizontalCellSpacing/2
+BipReceptiveField = 25
+BipSurroundField = 5
+AmaReceptiveField = AmaCellSpacing/2
+GanRodReceptiveField = GanCellSpacing/2
+GanConeReceptiveField = GanCellSpacing/2
+
+//----------------------------------------------------
+// ---------------Steady State Values-----------------
+//----------------------------------------------------
+
+// Stedy state values of neurons (mV) measured at t = 2200 ms (Currently not including Horizontal Cells v4)
+SSCone = -53.2609
+SSRod = -42.611874
+SSHorizontal = -69.36
+SSConeONBipolar = -38.227547
+SSConeOFFBipolar = -19.071308
+SSRodONBipolar = -37.982483
+SSAmacrine = -43.40546
+SSONGanglion = -70
+SSOFFGanglion = -70
+
+
+//-----------------------------------------------------
+// ---------------Type Objects-------------------------
+//-----------------------------------------------------
+
+objref random_PR
+objref PRTrackodd, PRTrackeven
+objref random_BP
+objref BipTrackodd, BipTrackeven
+objref random_Ama
+objref AmaTrackodd, AmaTrackeven
+objref bip2amaconnecTrackodd, bip2amaconnecTrackeven
+objref random_Gan
+objref GanTrackodd, GanTrackeven
+objref BipoddPRCSTrackodd[BipX][BipY], BipevenPRCSTrackodd[BipX + 1][BipY - 1], BipoddPRCSTrackeven[BipX][BipY], BipevenPRCSTrackeven[BipX + 1][BipY - 1]
+
+//------------------------------------------------------------
+// ---------------POSITIONING OBJECTS-------------------------
+//------------------------------------------------------------
+
+objref PRoddX, PRoddY, PRevenX, PRevenY
+objref HorizontaloddX, HorizontaloddY, HorizontalevenX, HorizontalevenY
+objref BipoddX, BipoddY, BipevenX, BipevenY
+objref AmaoddX, AmaoddY, AmaevenX, AmaevenY
+objref GanoddX, GanoddY, GanevenX, GanevenY
+
+//-----------------------------------------------------------------
+// ---------------DEFINE OBJECT REFERENCES-------------------------
+//-----------------------------------------------------------------
+
+objref PRodd[PRX][PRY], PReven[PRX + 1][PRX - 1]
+objref Horizontalodd[HorizontalX][HorizontalY], Horizontaleven[HorizontalX + 1][HorizontalY - 1]
+objref Bipodd[BipX][BipY], Bipeven[BipX + 1][BipY - 1]
+objref Amaodd[AmaX][AmaY], Amaeven[AmaX + 1][AmaY - 1]
+objref Ganodd[GanX][GanY], Ganeven[GanX + 1][GanY - 1]
+
+//--------------------------------------------------------
+// ------------------DEFINE RD----------------------------
+//--------------------------------------------------------
+
+RD_Active = 1	// 0 = wild-type, 1 = photoreceptor-loss
+PR_loss = 1	// fraction of photoreceptors lost
+RD_Late_Active = 1 // 1 = pr-loss, 0 = late stage RD
+
+//-----------------------------------------------------------------------
+// ---------------DEFINE GAP JUNCTION REFERENCES-------------------------
+//-----------------------------------------------------------------------
+
+HomoPRGap = 0.5
+HeteroPRGap = 0.1
+Ama2BipGap = 2*RD_Late_Active
+
+objref PRGapJunctions[MaxNumPRGapConnections]
+objref AmaGapJunctions[MaxNumAmaGapConnections]
+
+//----------------------------------------------------------------
+// ---------------DEFINE INPUT REFERENCES-------------------------
+//----------------------------------------------------------------
+
+objref darkinput_rododd[PRX][PRY], darkinput_rodeven[PRX + 1][PRY - 1]
+objref brightinput_rododd[PRX][PRY], brightinput_rodeven[PRX + 1][PRY - 1]
+objref darkinput_coneodd[PRX][PRY], darkinput_coneeven[PRX + 1][PRY - 1]
+objref brightinput_coneodd[PRX][PRY], brightinput_coneeven[PRX + 1][PRY - 1]
+
+// Gap junctions are stable at 900 ms
+RodStimAmp = 0 //40
+RodStimDel = 1300
+RodStimTime = 400
+
+ConeStimAmp = 0 //40
+ConeStimDel = 1300
+ConeStimTime = 400
+
+//-------------------------------------------------------------
+// ---------------DEFINE CLAMP OBJECTS-------------------------
+//-------------------------------------------------------------
+
+objref PRClampodd[PRX][PRY], PRClampeven[PRX + 1][PRY - 1]
+objref HorizontalClampodd[HorizontalX][HorizontalY], HorizontalClampeven[HorizontalX + 1][HorizontalY - 1]
+objref BipClampodd[BipX][BipY], BipClampeven[BipX + 1][BipY - 1]
+objref AmaClampodd[AmaX][AmaY], AmaClampeven[AmaX + 1][AmaY - 1]
+objref GanClampodd[GanX][GanY], GanClampeven[GanX + 1][GanY - 1]
+
+//-------------------------------------------------------------------
+// ---------------DEFINE SYNAPTIC REFERENCES-------------------------
+//-------------------------------------------------------------------
+
+HorizontalEXSynapticConductance = 0.05/85 // Reduction factor due to geometry (i_syn is kept constant but g_syn is variable)
+HorizontalINSynapticConductance = -0.05
+
+if(RD_Active == 0) {
+	ONBipSynapticConductance = 0.000256
+	OFFBipSynapticConductance = -0.000256
+	RodBipSynapticConductance = 0.000256
+}
+if(RD_Active == 1) {
+	ONBipSynapticConductance = 0.000256 * PR_loss // Replicates a depolarisation due to loss of glutamate, modified such that ON cone Bip resting potential is -30 mV
+	OFFBipSynapticConductance = 0
+	RodBipSynapticConductance = 0
+}
+
+AmaSynapticConductance = 0.003*RD_Late_Active
+Ama2GanSynapticConductance = 0.0003*RD_Late_Active
+RodBip2AmaSynapticConductance = 0.00256*RD_Late_Active
+GanSynapticConductance = 0.00256*RD_Late_Active
+
+HorizontalEXSynapticThreshold = -45
+HorizontalINSynapticThreshold = -47
+RodBipSynapticThreshold = -45
+ConeBipSynapticThreshold = -45
+AmaSynapticThreshold = -57
+Ama2ConeOFFBipThreshold = -59
+RodBip2AmaSynapticThreshold = -37
+ConeONGanSynapticThreshold = -36
+ConeOFFGanSynapticThreshold = -41.5
+synapse_counter = 0
+
+objref Glur2GanoddBipodd[GanX][GanY][BipX][BipY], Glur2GanoddBipeven[GanX][GanY][BipX + 1][BipY - 1]
+objref Glur2GanevenBipodd[GanX + 1][GanY - 1][BipX][BipY], Glur2GanevenBipeven[GanX + 1][GanY - 1][BipX + 1][BipY - 1]
+
+objref Glur2BipoddPRodd[BipX][BipY][PRX][PRY], Glur2BipoddPReven[BipX][BipY][PRX + 1][PRY - 1]
+objref Glur2BipevenPRodd[BipX + 1][BipY - 1][PRX][PRY], Glur2BipevenPReven[BipX + 1][BipY - 1][PRX + 1][PRY - 1]
+
+objref Glur2HorizontaloddPRodd[HorizontalX][HorizontalY][PRX][PRY], Glur2HorizontaloddPReven[HorizontalX][HorizontalY][PRX + 1][PRY - 1]
+objref Glur2HorizontalevenPRodd[HorizontalX + 1][HorizontalY - 1][PRX][PRY], Glur2HorizontalevenPReven[HorizontalX + 1][HorizontalY - 1][PRX + 1][PRY - 1]
+objref Glur2PRoddHorizontalodd[PRX][PRY][HorizontalX][HorizontalY], Glur2PRoddHorizontaleven[PRX][PRY][HorizontalX + 1][HorizontalY - 1]
+objref Glur2PRevenHorizontalodd[PRX + 1][PRY - 1][HorizontalX][HorizontalY], Glur2PRevenHorizontaleven[PRX + 1][PRY - 1][HorizontalX + 1][HorizontalY - 1]
+
+objref Glur2AmaoddBipodd[AmaX][AmaY][BipX][BipY], Glur2AmaoddBipeven[AmaX][AmaY][BipX + 1][BipY - 1]
+objref Glur2AmaevenBipodd[AmaX + 1][AmaY - 1][BipX][BipY], Glur2AmaevenBipeven[AmaX + 1][AmaY - 1][BipX + 1][BipY - 1]
+objref Glur2AmaoddGanodd[AmaX][AmaY][GanX][GanY], Glur2AmaoddGaneven[AmaX][AmaY][GanX + 1][GanY - 1]
+objref Glur2AmaevenGanodd[AmaX + 1][AmaY - 1][GanX][GanY], Glur2AmaevenGaneven[AmaX + 1][AmaY - 1][GanX + 1][GanY - 1]
+
+// counter variables
+objref ONCBCoddCounter, ONCBCevenCounter, OFFCBCoddCounter, OFFCBCevenCounter, RBCoddCounter, RBCevenCounter
+objref HorizontaloddCounter, HorizontalevenCounter
+objref AmaoddCounter, AmaevenCounter
+objref ONRGCoddCounter, ONRGCevenCounter, OFFRGCoddCounter, OFFRGCevenCounter
+objref pc1
+
+//---------------------------------------------------------------------
+// ------------------RECORD AND SAVE RESPONSES-------------------------
+//---------------------------------------------------------------------
+
+// Objects for tracking matrices
+objref savPRTrackodd, savPRTrackeven
+objref savBipTrackodd, savBipTrackeven
+objref savAmaTrackodd, savAmaTrackeven
+objref savGanTrackodd, savGanTrackeven
+objref savbip2amaconnecTrackodd, savbip2amaconnecTrackeven
+
+// Objects for position Matrices
+objref savPRoddX, savPRoddY, savPRevenX, savPRevenY
+objref savBipoddX, savBipoddY, savBipevenX, savBipevenY
+objref savGanoddX, savGanoddY, savGanevenX, savGanevenY
+
+// Objects for saving counting Matrices
+objref savONCBCoddCount, savONCBCevenCount, savOFFCBCoddCount, savOFFCBCevenCount, savRBCoddCount, savRBCevenCount
+objref savHoroddCount, savHorevenCount
+objref savAmaoddCount, savAmaevenCount
+objref savONRGCoddCount, savONRGCevenCount, savOFFRGCoddCount, savOFFRGCevenCount
+
+// Objects for response vetors
+objref rect, recCone, recRod, recHorizon, recONBip, recOFFBip, recRodBip, recA2, recONGan, recOFFGan
+objref savt, savCone, savRod, savHorizon, savONBip, savOFFBip, savRodBip, savA2, savONGan, savOFFGan
+
+// Objects for saving synaptic currents
+objref recONGanExc, recOFFGanExc, recOFFGanInh
+objref savONGanExc, savOFFGanExc, savOFFGanInh
+
+objref g[20]
+
+objref GanConnecONodd, GanConnecONeven, GanConnecOFF, GanConnecAmaOFF, GanConnecAma21odd, GanConnecAma21even
+objref savGanConnecONodd, savGanConnecONeven, savGanConnecOFF, savGanConnecAmaOFF, savGanConnecAma21odd, savGanConnecAma21even
+
+objref recGanOdd[GanX][GanY], savGanOdd[GanX][GanY]
+objref recGanEven[GanX + 1][GanY - 1], savGanEven[GanX + 1][GanY - 1]
+//--------------------------------------------------------
+// ------------------CREATE CELLS-------------------------
+//--------------------------------------------------------
+
+proc Create_ON_OFF_Network_Cells() {
+
+	// Create Photoreceptors
+	random_PR = new Random(35) // 35:1 ratio of rods to cones in mouse [Jeon 1998]
+	PRTrackodd = new Matrix(PRX, PRY)
+	PRoddX = new Matrix(PRX, PRY)
+	PRoddY = new Matrix(PRX, PRY)
+	for i = 0, PRX - 1 {
+		for j = 0, PRY - 1 {
+			d = random_PR.uniform(0, 35)
+			PRoddX.x[i][j] = PRCellSpacing*i*sin(PI/3)/cos(PI/3)
+			PRoddY.x[i][j] = PRCellSpacing*j
+			if(d < 34) {
+				PRTrackodd.x[i][j] = 1											// 1 = Rod
+				PRodd[i][j] = new Rod(PRoddY.x[i][j], PRoddX.x[i][j], PRCellZ)
+				NumRod = NumRod + 1
+			} else {
+				PRTrackodd.x[i][j] = 2											// 2 = Cone
+				PRodd[i][j] = new Cone(PRoddY.x[i][j], PRoddX.x[i][j], PRCellZ)
+				NumCone = NumCone + 1
+			}
+		}
+	}
+	
+	PRTrackeven = new Matrix(PRX + 1, PRY - 1)
+	PRevenX = new Matrix(PRX + 1, PRY - 1)
+	PRevenY = new Matrix(PRX + 1, PRY - 1)
+	for i = 0, PRX {
+		for j = 0, PRY - 2 {
+			d = random_PR.uniform(0, 35)
+			PRevenX.x[i][j] = PRCellSpacing*(i - 0.5)*sin(PI/3)/cos(PI/3)
+			PRevenY.x[i][j] = PRCellSpacing*(j + 0.5)
+			if(d < 34) {
+				PRTrackeven.x[i][j] = 1											// 1 = Rod
+				PReven[i][j] = new Rod(PRevenY.x[i][j], PRevenX.x[i][j], PRCellZ)
+				NumRod = NumRod + 1
+			} else {
+				PRTrackeven.x[i][j] = 2											// 2 = Cone
+				PReven[i][j] = new Cone(PRevenY.x[i][j], PRevenX.x[i][j], PRCellZ)
+				NumCone = NumCone + 1
+			}
+		}
+	}
+	
+	// Create Horizontal Cells
+	HorizontaloddX = new Matrix(HorizontalX, HorizontalY)
+	HorizontaloddY = new Matrix(HorizontalX, HorizontalY)
+	for i = 0, HorizontalX - 1 {
+		for j = 0, HorizontalY - 1 {
+			HorizontaloddX.x[i][j] = HorizontalCellSpacing/2 + HorizontalCellSpacing*i*sin(PI/3)/cos(PI/3)
+			HorizontaloddY.x[i][j] = HorizontalCellSpacing/2 + HorizontalCellSpacing*j
+			Horizontalodd[i][j] = new Horizontal(HorizontaloddY.x[i][j], HorizontaloddX.x[i][j], HorizontalCellZ)
+			NumHorizontal = NumHorizontal + 1
+		}
+	}
+	
+	HorizontalevenX = new Matrix(HorizontalX + 1, HorizontalY - 1)
+	HorizontalevenY = new Matrix(HorizontalX + 1, HorizontalY - 1)
+	for i = 0, HorizontalX {
+		for j = 0, HorizontalY - 2 {
+			HorizontalevenX.x[i][j] = HorizontalCellSpacing/2 + HorizontalCellSpacing*(i - 0.5)*sin(PI/3)/cos(PI/3)
+			HorizontalevenY.x[i][j] = HorizontalCellSpacing/2 + HorizontalCellSpacing*(j + 0.5)
+			Horizontaleven[i][j] = new Horizontal(HorizontalevenY.x[i][j], HorizontalevenX.x[i][j], HorizontalCellZ)
+			NumHorizontal = NumHorizontal + 1
+		}
+	}
+	
+	// Create Bipolar Cells
+	random_BP = new Random(DensityONBip + DensityOFFBip + DensityRodBip) // Ratio of types of bip cells from [Berens 2016] [Balasubramanian 2009] [Ratliff 2010]
+	BipTrackodd = new Matrix(BipX, BipY)
+	BipoddX = new Matrix(BipX, BipY)
+	BipoddY = new Matrix(BipX, BipY)
+	for i = 0, BipX - 1 {
+		for j = 0, BipY - 1 {
+			d = random_BP.uniform(0, DensityONBip + DensityOFFBip + DensityRodBip)
+			BipoddX.x[i][j] = BipCellSpacing/2 + BipCellSpacing*i*sin(PI/3)/cos(PI/3)
+			BipoddY.x[i][j] = BipCellSpacing/2 + BipCellSpacing*j
+			Bipodd[i][j] = new Bip(BipoddY.x[i][j], BipoddX.x[i][j], BipCellZ)
+			if(d < DensityONBip) {
+				BipTrackodd.x[i][j] = 1									// 1 = ON Bipolar Cell
+				NumONBip = NumONBip + 1
+			} else if(d > DensityONBip && d < DensityONBip + DensityOFFBip) {
+				BipTrackodd.x[i][j] = 2									// 2 = OFF Bipolar Cell
+				NumOFFBip = NumOFFBip + 1
+			} else {
+				BipTrackodd.x[i][j] = 3									// 3 = Rod Bipolar Cell
+				NumRodBip = NumRodBip + 1
+			}
+			NumTotalBip = NumTotalBip + 1
+		}
+	}
+	
+	BipTrackeven = new Matrix(BipX + 1, BipY - 1)
+	BipevenX = new Matrix(BipX + 1, BipY - 1)
+	BipevenY = new Matrix(BipX + 1, BipY - 1)
+	for i = 0, BipX {
+		for j = 0, BipY - 2 {
+			d = random_BP.uniform(0, DensityONBip + DensityOFFBip + DensityRodBip)
+			BipevenX.x[i][j] = BipCellSpacing/2 + BipCellSpacing*(i - 0.5)*sin(PI/3)/cos(PI/3)
+			BipevenY.x[i][j] = BipCellSpacing/2 + BipCellSpacing*(j + 0.5)
+			Bipeven[i][j] = new Bip(BipevenY.x[i][j], BipevenX.x[i][j], BipCellZ)
+			if(d < DensityONBip) {
+				BipTrackeven.x[i][j] = 1									// 1 = ON Bipolar Cell
+				NumONBip = NumONBip + 1
+			} else if(d > DensityONBip && d < DensityONBip + DensityOFFBip) {
+				BipTrackeven.x[i][j] = 2									// 2 = OFF Bipolar Cell
+				NumOFFBip = NumOFFBip + 1
+			} else {
+				BipTrackeven.x[i][j] = 3									// 3 = Rod Bipolar Cell
+				NumRodBip = NumRodBip + 1
+			}
+			NumTotalBip = NumTotalBip + 1
+		}
+	}
+	
+	// Create Amacrine Cells 
+	random_Ama = new Random(100)
+	AmaTrackodd = new Matrix(AmaX, AmaY)
+	AmaoddX = new Matrix(AmaX, AmaY)
+	AmaoddY = new Matrix(AmaX, AmaY)
+	for i = 0, AmaX - 1 {
+		for j = 0, AmaY - 1 {
+			d = random_Ama.uniform(0, 100)
+			AmaoddX.x[i][j] = AmaCellSpacing/2 + AmaCellSpacing*i*sin(PI/3)/cos(PI/3)
+			AmaoddY.x[i][j] = AmaCellSpacing/2 + AmaCellSpacing*j
+			//if(d < DensityAII) {
+				Amaodd[i][j] = new A2(AmaoddY.x[i][j], AmaoddX.x[i][j], AmaCellZ)
+				AmaTrackodd.x[i][j] = 1
+				NumAII = NumAII + 1
+			//}
+			NumAma = NumAma + 1
+		}
+	}
+	
+	AmaTrackeven = new Matrix(AmaX + 1, AmaY - 1)
+	AmaevenX = new Matrix(AmaX + 1, AmaY - 1)
+	AmaevenY = new Matrix(AmaX + 1, AmaY - 1)
+	for i = 0, AmaX {
+		for j = 0, AmaY - 2 {
+			d = random_Ama.uniform(0, 100)
+			AmaevenX.x[i][j] = AmaCellSpacing/2 + AmaCellSpacing*(i - 0.5)*sin(PI/3)/cos(PI/3)
+			AmaevenY.x[i][j] = AmaCellSpacing/2 + AmaCellSpacing*(j + 0.5)
+			//if(d < DensityAII) {
+				Amaeven[i][j] = new A2(AmaevenY.x[i][j], AmaevenX.x[i][j], AmaCellZ)
+				AmaTrackeven.x[i][j] = 1
+				NumAII = NumAII + 1
+			//}
+			NumAma = NumAma + 1
+		}
+	}
+	
+	// Create Ganglion Cells
+	random_Gan = new Random((DensityONGan + DensityOFFGan)*10) 		// Ratio of ON to OFF Ganglion cells is 1:1.7 [Ratliff 2010]
+	GanTrackodd = new Matrix(GanX, GanY)
+	GanoddX = new Matrix(GanX, GanY)
+	GanoddY = new Matrix(GanX, GanY)
+	for i = 0, GanX - 1 {
+		for j = 0, GanY - 1 {
+			d = random_Gan.uniform(0,(DensityONGan + DensityOFFGan)*10)
+			GanoddX.x[i][j] = GanCellSpacing/2 + GanCellSpacing*i*sin(PI/3)/cos(PI/3)
+			GanoddY.x[i][j] = GanCellSpacing/2 + GanCellSpacing*j
+			Ganodd[i][j] = new Ganglion(GanoddY.x[i][j], GanoddX.x[i][j], GanCellZ)
+			if(d < DensityONGan*10) {
+				GanTrackodd.x[i][j] = 1						// 1 = ON Cell
+				NumONGan = NumONGan + 1
+			} else {
+				GanTrackodd.x[i][j] = 2						// 2 = OFF Cell
+				NumOFFGan = NumOFFGan + 1
+			}
+			NumTotalGan = NumTotalGan + 1
+		}
+	}
+	
+	GanTrackeven = new Matrix(GanX + 1, GanY - 1)
+	GanevenX = new Matrix(GanX + 1, GanY - 1)
+	GanevenY = new Matrix(GanX + 1, GanY - 1)
+	for i = 0, GanX {
+		for j = 0, GanY - 2 {
+			d = random_Gan.uniform(0,(DensityONGan + DensityOFFGan)*10)
+			GanevenX.x[i][j] = GanCellSpacing/2 + GanCellSpacing*(i - 0.5)*sin(PI/3)/cos(PI/3)
+			GanevenY.x[i][j] = GanCellSpacing/2 + GanCellSpacing*(j + 0.5)
+			Ganeven[i][j] = new Ganglion(GanevenY.x[i][j], GanevenX.x[i][j], GanCellZ)
+			if(d < DensityONGan*10) {
+				GanTrackeven.x[i][j] = 1						// 1 = ON Cell
+				NumONGan = NumONGan + 1
+			} else {
+				GanTrackeven.x[i][j] = 2						// 2 = OFF Cell
+				NumOFFGan = NumOFFGan + 1
+			}
+			NumTotalGan = NumTotalGan + 1
+		}
+	}
+	
+}
+
+//----------------------------------------------------------------
+// ------------------CREATE GAP JUNCTIONS-------------------------
+//----------------------------------------------------------------
+
+proc Create_Gap_Junctions() {
+
+	// Horizontal Photoreceptor Gap Junctions
+	for i = 0, PRX - 2 {
+		for j = 0, PRY - 1 {
+			PRGapJunctions[NumPRGapConnections] = new Gap()
+			PRodd[i][j].soma PRGapJunctions[NumPRGapConnections].src(0.95)
+			PRodd[i + 1][j].soma PRGapJunctions[NumPRGapConnections].target(0.95)
+			if(PRTrackodd.x[i][j] == PRTrackodd.x[i + 1][j]) {
+				PRGapJunctions[NumPRGapConnections].g(HomoPRGap)
+			} else {
+				PRGapJunctions[NumPRGapConnections].g(HeteroPRGap)
+			}
+			NumPRGapConnections = NumPRGapConnections + 1
+		}
+	}
+	
+	for i = 0, PRX - 1 {
+		for j = 0, PRY - 2 {
+			PRGapJunctions[NumPRGapConnections] = new Gap()
+			PReven[i][j].soma PRGapJunctions[NumPRGapConnections].src(0.95)
+			PReven[i + 1][j].soma PRGapJunctions[NumPRGapConnections].target(0.95)
+			if(PRTrackeven.x[i][j] == PRTrackeven.x[i + 1][j]) {
+				PRGapJunctions[NumPRGapConnections].g(HomoPRGap)
+			} else {
+				PRGapJunctions[NumPRGapConnections].g(HeteroPRGap)
+			}
+			NumPRGapConnections = NumPRGapConnections + 1
+		}
+	}
+	
+	// +'ve Gradient Photoreceptor Gap Junctions
+	for i = 0, PRX - 1 {
+		for j = 0, PRY - 2 {
+			PRGapJunctions[NumPRGapConnections] = new Gap()
+			PRodd[i][j].soma PRGapJunctions[NumPRGapConnections].src(0.95)
+			PReven[i][j].soma PRGapJunctions[NumPRGapConnections].target(0.95)
+			if(PRTrackodd.x[i][j] == PRTrackeven.x[i][j]) {
+				PRGapJunctions[NumPRGapConnections].g(HomoPRGap)
+			} else {
+				PRGapJunctions[NumPRGapConnections].g(HeteroPRGap)
+			}
+			NumPRGapConnections = NumPRGapConnections + 1
+			
+			PRGapJunctions[NumPRGapConnections] = new Gap()
+			PReven[i + 1][j].soma PRGapJunctions[NumPRGapConnections].src(0.95)
+			PRodd[i][j + 1].soma PRGapJunctions[NumPRGapConnections].target(0.95)
+			if(PRTrackeven.x[i + 1][j] == PRTrackodd.x[i][j + 1]) {
+				PRGapJunctions[NumPRGapConnections].g(HomoPRGap)
+			} else {
+				PRGapJunctions[NumPRGapConnections].g(HeteroPRGap)
+			}
+			NumPRGapConnections = NumPRGapConnections + 1
+		}
+	}
+	
+	// -'ve Gradient Photoreceptor Gap Junctions
+	for i = 0, PRX - 1 {
+		for j = 0, PRY - 2 {
+			PRGapJunctions[NumPRGapConnections] = new Gap()
+			PRodd[i][j].soma PRGapJunctions[NumPRGapConnections].src(0.95)
+			PReven[i + 1][j].soma PRGapJunctions[NumPRGapConnections].target(0.95)
+			if(PRTrackodd.x[i][j] == PRTrackeven.x[i + 1][j]) {
+				PRGapJunctions[NumPRGapConnections].g(HomoPRGap)
+			} else {
+				PRGapJunctions[NumPRGapConnections].g(HeteroPRGap)
+			}
+			NumPRGapConnections = NumPRGapConnections + 1
+			
+			PRGapJunctions[NumPRGapConnections] = new Gap()
+			PReven[i][j].soma PRGapJunctions[NumPRGapConnections].src(0.95)
+			PRodd[i][j + 1].soma PRGapJunctions[NumPRGapConnections].target(0.95)
+			if(PRTrackeven.x[i][j] == PRTrackodd.x[i][j + 1]) {
+				PRGapJunctions[NumPRGapConnections].g(HomoPRGap)
+			} else {
+				PRGapJunctions[NumPRGapConnections].g(HeteroPRGap)
+			}
+			NumPRGapConnections = NumPRGapConnections + 1
+		}
+	}
+
+}
+
+//-----------------------------------------------------------------------
+// ------------------CREATE SYNAPTIC CONNECTIONS-------------------------
+//-----------------------------------------------------------------------
+
+proc CountGanConnect() {
+
+	ONRGCoddCounter = new Matrix(GanX, GanY)
+	ONRGCevenCounter = new Matrix(GanX + 1, GanY - 1)
+	for i = 0, GanX - 1 {
+		for j = 0, GanY - 1 {
+			if(GanTrackodd.x[i][j] == 1) {
+				for k = 0, BipX - 1 {
+					for l = 0, BipY - 1 {
+						if(sqrt((BipoddX.x[k][l] - GanoddX.x[i][j])^2 + (BipoddY.x[k][l] - GanoddY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackodd.x[k][l] == 1) {
+								ONRGCoddCounter.x[i][j] = ONRGCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, BipX {
+					for l = 0, BipY - 2 {
+						if(sqrt((BipevenX.x[k][l] - GanoddX.x[i][j])^2 + (BipevenY.x[k][l] - GanoddY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackeven.x[k][l] == 1) {
+								ONRGCoddCounter.x[i][j] = ONRGCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	for i = 0, GanX {
+		for j = 0, GanY - 2 {
+			if(GanTrackeven.x[i][j] == 1) {
+				for k = 0, BipX - 1 {
+					for l = 0, BipY - 1 {
+						if(sqrt((BipoddX.x[k][l] - GanevenX.x[i][j])^2 + (BipoddY.x[k][l] - GanevenY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackodd.x[k][l] == 1) {
+								ONRGCevenCounter.x[i][j] = ONRGCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, BipX {
+					for l = 0, BipY - 2 {
+						if(sqrt((BipevenX.x[k][l] - GanevenX.x[i][j])^2 + (BipevenY.x[k][l] - GanevenY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackeven.x[k][l] == 1) {
+								ONRGCevenCounter.x[i][j] = ONRGCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	OFFRGCoddCounter = new Matrix(GanX, GanY)
+	OFFRGCevenCounter = new Matrix(GanX + 1, GanY - 1)
+	for i = 0, GanX - 1 {
+		for j = 0, GanY - 1 {
+			if(GanTrackodd.x[i][j] == 2) {
+				for k = 0, BipX - 1 {
+					for l = 0, BipY - 1 {
+						if(sqrt((BipoddX.x[k][l] - GanoddX.x[i][j])^2 + (BipoddY.x[k][l] - GanoddY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackodd.x[k][l] == 2) {
+								OFFRGCoddCounter.x[i][j] = OFFRGCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, BipX {
+					for l = 0, BipY - 2 {
+						if(sqrt((BipevenX.x[k][l] - GanoddX.x[i][j])^2 + (BipevenY.x[k][l] - GanoddY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackeven.x[k][l] == 2) {
+								OFFRGCoddCounter.x[i][j] = OFFRGCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	for i = 0, GanX {
+		for j = 0, GanY - 2 {
+			if(GanTrackeven.x[i][j] == 2) {
+				for k = 0, BipX - 1 {
+					for l = 0, BipY - 1 {
+						if(sqrt((BipoddX.x[k][l] - GanevenX.x[i][j])^2 + (BipoddY.x[k][l] - GanevenY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackodd.x[k][l] == 2) {
+								OFFRGCevenCounter.x[i][j] = OFFRGCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, BipX {
+					for l = 0, BipY - 2 {
+						if(sqrt((BipevenX.x[k][l] - GanevenX.x[i][j])^2 + (BipevenY.x[k][l] - GanevenY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackeven.x[k][l] == 2) {
+								OFFRGCevenCounter.x[i][j] = OFFRGCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+}
+
+proc Ganodd_Synapses() {
+
+	// Generate Synapses for Ganodd Matrix
+	for i = 0, GanX - 1 {
+		for j = 0, GanY - 1 {
+			// Check Bipodd Matrix
+			for k = 0, BipX - 1 {
+				for l = 0, BipY - 1 {
+					if(GanTrackodd.x[i][j] == 1) {																							// ON Cell
+						if(sqrt((BipoddX.x[k][l] - GanoddX.x[i][j])^2 + (BipoddY.x[k][l] - GanoddY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackodd.x[k][l] == 1) {
+								Glur2GanoddBipodd[i][j][k][l] = new GradSyn_bip_gan_excite()
+								Ganodd[i][j].soma Glur2GanoddBipodd[i][j][k][l].loc(0.95)
+								setpointer Glur2GanoddBipodd[i][j][k][l].V_pre, Bipodd[k][l].soma.v(0.95)
+								Glur2GanoddBipodd[i][j][k][l].e = 0
+								Glur2GanoddBipodd[i][j][k][l].V_thr = ConeONGanSynapticThreshold
+								Glur2GanoddBipodd[i][j][k][l].g_max = GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					} else if(GanTrackodd.x[i][j] == 2) {																					// OFF Cell
+						if(sqrt((BipoddX.x[k][l] - GanoddX.x[i][j])^2 + (BipoddY.x[k][l] - GanoddY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackodd.x[k][l] == 2) {
+								Glur2GanoddBipodd[i][j][k][l] = new GradSyn_bip_gan_inhibit()
+								Ganodd[i][j].soma Glur2GanoddBipodd[i][j][k][l].loc(0.95)
+								setpointer Glur2GanoddBipodd[i][j][k][l].V_pre, Bipodd[k][l].soma.v(0.95)
+								Glur2GanoddBipodd[i][j][k][l].e = 0
+								Glur2GanoddBipodd[i][j][k][l].V_thr = ConeOFFGanSynapticThreshold
+								Glur2GanoddBipodd[i][j][k][l].g_max = GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+			}
+			
+			// Check Bipeven Matrix
+			for k = 0, BipX {
+				for l = 0, BipY - 2 {
+					if(GanTrackodd.x[i][j] == 1) {																							// ON Cell
+						if(sqrt((BipevenX.x[k][l] - GanoddX.x[i][j])^2 + (BipevenY.x[k][l] - GanoddY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackeven.x[k][l] == 1) {
+								Glur2GanoddBipeven[i][j][k][l] = new GradSyn_bip_gan_excite()
+								Ganodd[i][j].soma Glur2GanoddBipeven[i][j][k][l].loc(0.95)
+								setpointer Glur2GanoddBipeven[i][j][k][l].V_pre, Bipeven[k][l].soma.v(0.95)
+								Glur2GanoddBipeven[i][j][k][l].e = 0
+								Glur2GanoddBipeven[i][j][k][l].V_thr = ConeONGanSynapticThreshold
+								Glur2GanoddBipeven[i][j][k][l].g_max = GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					} else if(GanTrackodd.x[i][j] == 2) {																					// OFF Cell
+						if(sqrt((BipevenX.x[k][l] - GanoddX.x[i][j])^2 + (BipevenY.x[k][l] - GanoddY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackeven.x[k][l] == 2) {
+								Glur2GanoddBipeven[i][j][k][l] = new GradSyn_bip_gan_inhibit()
+								Ganodd[i][j].soma Glur2GanoddBipeven[i][j][k][l].loc(0.95)
+								setpointer Glur2GanoddBipeven[i][j][k][l].V_pre, Bipeven[k][l].soma.v(0.95)
+								Glur2GanoddBipeven[i][j][k][l].e = 0
+								Glur2GanoddBipeven[i][j][k][l].V_thr = ConeOFFGanSynapticThreshold
+								Glur2GanoddBipeven[i][j][k][l].g_max = GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+proc Ganeven_Synapses() {
+	
+	// Generate Synapses for Ganeven Matrix
+	for i = 0, GanX {
+		for j = 0, GanY - 2 {
+			// Check Bipodd Matrix
+			for k = 0, BipX - 1 {
+				for l = 0, BipY - 1 {
+					if(GanTrackeven.x[i][j] == 1) {																							// ON Cell
+						if(sqrt((BipoddX.x[k][l] - GanevenX.x[i][j])^2 + (BipoddY.x[k][l] - GanevenY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackodd.x[k][l] == 1) {
+								Glur2GanevenBipodd[i][j][k][l] = new GradSyn_bip_gan_excite()
+								Ganeven[i][j].soma Glur2GanevenBipodd[i][j][k][l].loc(0.95)
+								setpointer Glur2GanevenBipodd[i][j][k][l].V_pre, Bipodd[k][l].soma.v(0.95)
+								Glur2GanevenBipodd[i][j][k][l].e = 0
+								Glur2GanevenBipodd[i][j][k][l].V_thr = ConeONGanSynapticThreshold
+								Glur2GanevenBipodd[i][j][k][l].g_max = GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					} else if(GanTrackeven.x[i][j] == 2) {																					// OFF Cell
+						if(sqrt((BipoddX.x[k][l] - GanevenX.x[i][j])^2 + (BipoddY.x[k][l] - GanevenY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackodd.x[k][l] == 2) {
+								Glur2GanevenBipodd[i][j][k][l] = new GradSyn_bip_gan_inhibit()
+								Ganeven[i][j].soma Glur2GanevenBipodd[i][j][k][l].loc(0.95)
+								setpointer Glur2GanevenBipodd[i][j][k][l].V_pre, Bipodd[k][l].soma.v(0.95)
+								Glur2GanevenBipodd[i][j][k][l].e = 0
+								Glur2GanevenBipodd[i][j][k][l].V_thr = ConeOFFGanSynapticThreshold
+								Glur2GanevenBipodd[i][j][k][l].g_max = GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+			}
+			
+			// Check Bipeven Matrix
+			for k = 0, BipX {
+				for l = 0, BipY - 2 {
+					if(GanTrackeven.x[i][j] == 1) {																							// ON Cell
+						if(sqrt((BipevenX.x[k][l] - GanevenX.x[i][j])^2 + (BipevenY.x[k][l] - GanevenY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackeven.x[k][l] == 1) {
+								Glur2GanevenBipeven[i][j][k][l] = new GradSyn_bip_gan_excite()
+								Ganeven[i][j].soma Glur2GanevenBipeven[i][j][k][l].loc(0.95)
+								setpointer Glur2GanevenBipeven[i][j][k][l].V_pre, Bipeven[k][l].soma.v(0.95)
+								Glur2GanevenBipeven[i][j][k][l].e = 0
+								Glur2GanevenBipeven[i][j][k][l].V_thr = ConeONGanSynapticThreshold
+								Glur2GanevenBipeven[i][j][k][l].g_max = GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					} else if(GanTrackeven.x[i][j] == 2) {																					// OFF Cell
+						if(sqrt((BipevenX.x[k][l] - GanevenX.x[i][j])^2 + (BipevenY.x[k][l] - GanevenY.x[i][j])^2) < GanConeReceptiveField) {
+							if(BipTrackeven.x[k][l] == 2) {
+								Glur2GanevenBipeven[i][j][k][l] = new GradSyn_bip_gan_inhibit()
+								Ganeven[i][j].soma Glur2GanevenBipeven[i][j][k][l].loc(0.95)
+								setpointer Glur2GanevenBipeven[i][j][k][l].V_pre, Bipeven[k][l].soma.v(0.95)
+								Glur2GanevenBipeven[i][j][k][l].e = 0
+								Glur2GanevenBipeven[i][j][k][l].V_thr = ConeOFFGanSynapticThreshold
+								Glur2GanevenBipeven[i][j][k][l].g_max = GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+proc CountBipConnect() {
+
+	// ONCBCoddCounter, ONCBCevenCounter, OFFCBCoddCounter, OFFCBCevenCounter, RBCoddCounter, RBCevenCounter
+	ONCBCoddCounter = new Matrix(BipX, BipY)
+	ONCBCevenCounter = new Matrix(BipX + 1, BipY - 1)
+	for i = 0, BipX - 1 {
+		for j = 0, BipY - 1 {
+			if(BipTrackodd.x[i][j] == 1) {
+				for k = 0, PRX - 1 {
+					for l = 0, PRY - 1 {
+						if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackodd.x[k][l] == 2) {
+								ONCBCoddCounter.x[i][j] = ONCBCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, PRX {
+					for l = 0, PRY - 2 {
+						if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackeven.x[k][l] == 2) {
+								ONCBCoddCounter.x[i][j] = ONCBCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	for i = 0, BipX {
+		for j = 0, BipY - 2 {
+			if(BipTrackeven.x[i][j] == 1) {
+				for k = 0, PRX - 1 {
+					for l = 0, PRY - 1 {
+						if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackodd.x[k][l] == 2) {
+								ONCBCevenCounter.x[i][j] = ONCBCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, PRX {
+					for l = 0, PRY - 2 {
+						if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackeven.x[k][l] == 2) {
+								ONCBCevenCounter.x[i][j] = ONCBCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	OFFCBCoddCounter = new Matrix(BipX, BipY)
+	OFFCBCevenCounter = new Matrix(BipX + 1, BipY - 1)
+	for i = 0, BipX - 1 {
+		for j = 0, BipY - 1 {
+			if(BipTrackodd.x[i][j] == 2) {
+				for k = 0, PRX - 1 {
+					for l = 0, PRY - 1 {
+						if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackodd.x[k][l] == 2) {
+								OFFCBCoddCounter.x[i][j] = OFFCBCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, PRX {
+					for l = 0, PRY - 2 {
+						if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackeven.x[k][l] == 2) {
+								OFFCBCoddCounter.x[i][j] = OFFCBCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	for i = 0, BipX {
+		for j = 0, BipY - 2 {
+			if(BipTrackeven.x[i][j] == 2) {
+				for k = 0, PRX - 1 {
+					for l = 0, PRY - 1 {
+						if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackodd.x[k][l] == 2) {
+								OFFCBCevenCounter.x[i][j] = OFFCBCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, PRX {
+					for l = 0, PRY - 2 {
+						if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackeven.x[k][l] == 2) {
+								OFFCBCevenCounter.x[i][j] = OFFCBCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	RBCoddCounter = new Matrix(BipX, BipY)
+	RBCevenCounter = new Matrix(BipX + 1, BipY - 1)
+	for i = 0, BipX - 1 {
+		for j = 0, BipY - 1 {
+			if(BipTrackodd.x[i][j] == 3) {
+				for k = 0, PRX - 1 {
+					for l = 0, PRY - 1 {
+						if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackodd.x[k][l] == 1) {
+								RBCoddCounter.x[i][j] = RBCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, PRX {
+					for l = 0, PRY - 2 {
+						if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackeven.x[k][l] == 1) {
+								RBCoddCounter.x[i][j] = RBCoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	for i = 0, BipX {
+		for j = 0, BipY - 2 {
+			if(BipTrackeven.x[i][j] == 3) {
+				for k = 0, PRX - 1 {
+					for l = 0, PRY - 1 {
+						if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackodd.x[k][l] == 1) {
+								RBCevenCounter.x[i][j] = RBCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, PRX {
+					for l = 0, PRY - 2 {
+						if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+							if(PRTrackeven.x[k][l] == 1) {
+								RBCevenCounter.x[i][j] = RBCevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+proc Bipodd_Synapses() {
+
+	// Generate Synapses for Bipodd Matrix
+	for i = 0, BipX - 1{
+		for j = 0, BipY - 1{
+			// Check PRodd Matrix
+			BipoddPRCSTrackodd[i][j] = new Matrix(PRX, PRY)
+			for k = 0, PRX - 1 {
+				for l = 0, PRY - 1 {
+					if(BipTrackodd.x[i][j] == 1) {
+						if(PRTrackodd.x[k][l] == 2) {
+							if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+								if(RD_Active == 0) {
+									Glur2BipoddPRodd[i][j][k][l] = new GradSyn_excite()
+									Bipodd[i][j].soma Glur2BipoddPRodd[i][j][k][l].loc(0.95)
+									setpointer Glur2BipoddPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+									Glur2BipoddPRodd[i][j][k][l].e = 0
+									Glur2BipoddPRodd[i][j][k][l].V_thr = ConeBipSynapticThreshold
+									Glur2BipoddPRodd[i][j][k][l].g_max = ONBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								if(RD_Active == 1) {
+									Glur2BipoddPRodd[i][j][k][l] = new GradSyn_excite_RD()
+									Bipodd[i][j].soma Glur2BipoddPRodd[i][j][k][l].loc(0.95)
+									setpointer Glur2BipoddPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+									Glur2BipoddPRodd[i][j][k][l].e = 0
+									Glur2BipoddPRodd[i][j][k][l].V_thr = ConeBipSynapticThreshold
+									Glur2BipoddPRodd[i][j][k][l].g_max = ONBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								BipoddPRCSTrackodd[i][j].x[k][l] = 1
+								if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipoddPRCSTrackodd[i][j].x[k][l] = 2
+								}
+							}
+						}
+					} else if(BipTrackodd.x[i][j] == 2) {
+						if(PRTrackodd.x[k][l] == 2) {
+							if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+								Glur2BipoddPRodd[i][j][k][l] = new GradSyn_inhibit()
+								Bipodd[i][j].soma Glur2BipoddPRodd[i][j][k][l].loc(0.95)
+								setpointer Glur2BipoddPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+								Glur2BipoddPRodd[i][j][k][l].e = 0
+								Glur2BipoddPRodd[i][j][k][l].V_thr = ConeBipSynapticThreshold
+								Glur2BipoddPRodd[i][j][k][l].g_max = OFFBipSynapticConductance
+								BipoddPRCSTrackodd[i][j].x[k][l] = 1
+								synapse_counter = synapse_counter + 1
+								if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipoddPRCSTrackodd[i][j].x[k][l] = 2
+								}
+							}
+						}
+					} else if(BipTrackodd.x[i][j] == 3) {
+						if(PRTrackodd.x[k][l] == 1) {
+							if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+								if(RD_Active == 0) {
+									Glur2BipoddPRodd[i][j][k][l] = new GradSyn_excite()
+									Bipodd[i][j].soma Glur2BipoddPRodd[i][j][k][l].loc(0.95)
+									setpointer Glur2BipoddPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+									Glur2BipoddPRodd[i][j][k][l].e = 0
+									Glur2BipoddPRodd[i][j][k][l].V_thr = RodBipSynapticThreshold
+									Glur2BipoddPRodd[i][j][k][l].g_max = RodBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								if(RD_Active == 1) {
+									Glur2BipoddPRodd[i][j][k][l] = new GradSyn_excite_RD()
+									Bipodd[i][j].soma Glur2BipoddPRodd[i][j][k][l].loc(0.95)
+									setpointer Glur2BipoddPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+									Glur2BipoddPRodd[i][j][k][l].e = 0
+									Glur2BipoddPRodd[i][j][k][l].V_thr = RodBipSynapticThreshold
+									Glur2BipoddPRodd[i][j][k][l].g_max = RodBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								BipoddPRCSTrackodd[i][j].x[k][l] = 1
+								if(sqrt((PRoddX.x[k][l] - BipoddX.x[i][j])^2 + (PRoddY.x[k][l] - BipoddY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipoddPRCSTrackodd[i][j].x[k][l] = 2
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			// Check PReven Matrix
+			BipoddPRCSTrackeven[i][j] = new Matrix(PRX + 1, PRY - 1)
+			for k = 0, PRX {
+				for l = 0, PRY - 2 {
+					if(BipTrackodd.x[i][j] == 1) {
+						if(PRTrackeven.x[k][l] == 2) {
+							if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+								if(RD_Active == 0) {
+									Glur2BipoddPReven[i][j][k][l] = new GradSyn_excite()
+									Bipodd[i][j].soma Glur2BipoddPReven[i][j][k][l].loc(0.95)
+									setpointer Glur2BipoddPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+									Glur2BipoddPReven[i][j][k][l].e = 0
+									Glur2BipoddPReven[i][j][k][l].V_thr = ConeBipSynapticThreshold
+									Glur2BipoddPReven[i][j][k][l].g_max = ONBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								if(RD_Active == 1) {
+									Glur2BipoddPReven[i][j][k][l] = new GradSyn_excite_RD()
+									Bipodd[i][j].soma Glur2BipoddPReven[i][j][k][l].loc(0.95)
+									setpointer Glur2BipoddPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+									Glur2BipoddPReven[i][j][k][l].e = 0
+									Glur2BipoddPReven[i][j][k][l].V_thr = ConeBipSynapticThreshold
+									Glur2BipoddPReven[i][j][k][l].g_max = ONBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								BipoddPRCSTrackeven[i][j].x[k][l] = 1
+								if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipoddPRCSTrackeven[i][j].x[k][l] = 2
+								}
+							}
+						}
+					} else if(BipTrackodd.x[i][j] == 2) {
+						if(PRTrackeven.x[k][l] == 2) {
+							if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+								Glur2BipoddPReven[i][j][k][l] = new GradSyn_inhibit()
+								Bipodd[i][j].soma Glur2BipoddPReven[i][j][k][l].loc(0.95)
+								setpointer Glur2BipoddPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+								Glur2BipoddPReven[i][j][k][l].e = 0
+								Glur2BipoddPReven[i][j][k][l].V_thr = ConeBipSynapticThreshold
+								Glur2BipoddPReven[i][j][k][l].g_max = OFFBipSynapticConductance
+								BipoddPRCSTrackeven[i][j].x[k][l] = 1
+								synapse_counter = synapse_counter + 1
+								if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipoddPRCSTrackeven[i][j].x[k][l] = 2
+								}
+							}
+						}
+					} else if(BipTrackodd.x[i][j] == 3) {
+						if(PRTrackeven.x[k][l] == 1) {
+							if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) < BipReceptiveField) {
+								if(RD_Active == 0) {
+									Glur2BipoddPReven[i][j][k][l] = new GradSyn_excite()
+									Bipodd[i][j].soma Glur2BipoddPReven[i][j][k][l].loc(0.95)
+									setpointer Glur2BipoddPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+									Glur2BipoddPReven[i][j][k][l].e = 0
+									Glur2BipoddPReven[i][j][k][l].V_thr = RodBipSynapticThreshold
+									Glur2BipoddPReven[i][j][k][l].g_max = RodBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								BipoddPRCSTrackeven[i][j].x[k][l] = 1
+								if(RD_Active == 1) {
+									Glur2BipoddPReven[i][j][k][l] = new GradSyn_excite_RD()
+									Bipodd[i][j].soma Glur2BipoddPReven[i][j][k][l].loc(0.95)
+									setpointer Glur2BipoddPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+									Glur2BipoddPReven[i][j][k][l].e = 0
+									Glur2BipoddPReven[i][j][k][l].V_thr = RodBipSynapticThreshold
+									Glur2BipoddPReven[i][j][k][l].g_max = RodBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								if(sqrt((PRevenX.x[k][l] - BipoddX.x[i][j])^2 + (PRevenY.x[k][l] - BipoddY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipoddPRCSTrackeven[i][j].x[k][l] = 2
+								}
+							}
+						}
+					}
+				}
+			}
+			
+		}
+	}
+	
+}
+
+proc Bipeven_Synapses() {
+	
+	// Generate Synapses for Bipeven Matrix
+	for i = 0, BipX {
+		for j = 0, BipY - 2 {
+			// Check PRodd Matrix
+			BipevenPRCSTrackodd[i][j] = new Matrix(PRX, PRY)
+			for k = 0, PRX - 1 {
+				for l = 0, PRY - 1 {
+					if(BipTrackeven.x[i][j] == 1) {
+						if(PRTrackodd.x[k][l] == 2) {
+							if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+								if(RD_Active == 0) {
+									Glur2BipevenPRodd[i][j][k][l] = new GradSyn_excite()
+									Bipeven[i][j].soma Glur2BipevenPRodd[i][j][k][l].loc(0.95)
+									setpointer Glur2BipevenPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+									Glur2BipevenPRodd[i][j][k][l].e = 0
+									Glur2BipevenPRodd[i][j][k][l].V_thr = ConeBipSynapticThreshold
+									Glur2BipevenPRodd[i][j][k][l].g_max = ONBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								if(RD_Active == 1) {
+									Glur2BipevenPRodd[i][j][k][l] = new GradSyn_excite_RD()
+									Bipeven[i][j].soma Glur2BipevenPRodd[i][j][k][l].loc(0.95)
+									setpointer Glur2BipevenPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+									Glur2BipevenPRodd[i][j][k][l].e = 0
+									Glur2BipevenPRodd[i][j][k][l].V_thr = ConeBipSynapticThreshold
+									Glur2BipevenPRodd[i][j][k][l].g_max = ONBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								BipevenPRCSTrackodd[i][j].x[k][l] = 1
+								if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipevenPRCSTrackodd[i][j].x[k][l] = 2
+								}
+							} 
+						}
+					} else if(BipTrackeven.x[i][j] == 2) {
+						if(PRTrackodd.x[k][l] == 2) {
+							if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+								Glur2BipevenPRodd[i][j][k][l] = new GradSyn_inhibit()
+								Bipeven[i][j].soma Glur2BipevenPRodd[i][j][k][l].loc(0.95)
+								setpointer Glur2BipevenPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+								Glur2BipevenPRodd[i][j][k][l].e = 0
+								Glur2BipevenPRodd[i][j][k][l].V_thr = ConeBipSynapticThreshold
+								Glur2BipevenPRodd[i][j][k][l].g_max = OFFBipSynapticConductance
+								BipevenPRCSTrackodd[i][j].x[k][l] = 1
+								synapse_counter = synapse_counter + 1
+								if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipevenPRCSTrackodd[i][j].x[k][l] = 2
+								}
+							} 
+						}
+					} else if(BipTrackeven.x[i][j] == 3) {
+						if(PRTrackodd.x[k][l] == 1) {
+							if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+								if(RD_Active == 0) {
+									Glur2BipevenPRodd[i][j][k][l] = new GradSyn_excite()
+									Bipeven[i][j].soma Glur2BipevenPRodd[i][j][k][l].loc(0.95)
+									setpointer Glur2BipevenPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+									Glur2BipevenPRodd[i][j][k][l].e = 0
+									Glur2BipevenPRodd[i][j][k][l].V_thr = RodBipSynapticThreshold
+									Glur2BipevenPRodd[i][j][k][l].g_max = RodBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								if(RD_Active == 1) {
+									Glur2BipevenPRodd[i][j][k][l] = new GradSyn_excite_RD()
+									Bipeven[i][j].soma Glur2BipevenPRodd[i][j][k][l].loc(0.95)
+									setpointer Glur2BipevenPRodd[i][j][k][l].V_pre, PRodd[k][l].soma.v(0.95)
+									Glur2BipevenPRodd[i][j][k][l].e = 0
+									Glur2BipevenPRodd[i][j][k][l].V_thr = RodBipSynapticThreshold
+									Glur2BipevenPRodd[i][j][k][l].g_max = RodBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								BipevenPRCSTrackodd[i][j].x[k][l] = 1
+								if(sqrt((PRoddX.x[k][l] - BipevenX.x[i][j])^2 + (PRoddY.x[k][l] - BipevenY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipevenPRCSTrackodd[i][j].x[k][l] = 2
+								}
+							} 
+						}
+					}
+				}
+			}
+			
+			// Check PReven Matrix 
+			BipevenPRCSTrackeven[i][j] = new Matrix(PRX + 1, PRY - 1)
+			for k = 0, PRX {
+				for l = 0, PRY - 2{
+					if(BipTrackeven.x[i][j] == 1) {
+						if(PRTrackeven.x[k][l] == 2) {
+							if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+								if(RD_Active == 0) {
+									Glur2BipevenPReven[i][j][k][l] = new GradSyn_excite()
+									Bipeven[i][j].soma Glur2BipevenPReven[i][j][k][l].loc(0.95)
+									setpointer Glur2BipevenPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+									Glur2BipevenPReven[i][j][k][l].e = 0
+									Glur2BipevenPReven[i][j][k][l].V_thr = ConeBipSynapticThreshold
+									Glur2BipevenPReven[i][j][k][l].g_max = ONBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								if(RD_Active == 1) {
+									Glur2BipevenPReven[i][j][k][l] = new GradSyn_excite_RD()
+									Bipeven[i][j].soma Glur2BipevenPReven[i][j][k][l].loc(0.95)
+									setpointer Glur2BipevenPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+									Glur2BipevenPReven[i][j][k][l].e = 0
+									Glur2BipevenPReven[i][j][k][l].V_thr = ConeBipSynapticThreshold
+									Glur2BipevenPReven[i][j][k][l].g_max = ONBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								} 
+								BipevenPRCSTrackeven[i][j].x[k][l] = 1
+								if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipevenPRCSTrackeven[i][j].x[k][l] = 2
+								}
+							} 
+						}
+					} else if(BipTrackeven.x[i][j] == 2) {
+						if(PRTrackeven.x[k][l] == 2) {
+							if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+								Glur2BipevenPReven[i][j][k][l] = new GradSyn_inhibit()
+								Bipeven[i][j].soma Glur2BipevenPReven[i][j][k][l].loc(0.95)
+								setpointer Glur2BipevenPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+								Glur2BipevenPReven[i][j][k][l].e = 0
+								Glur2BipevenPReven[i][j][k][l].V_thr = ConeBipSynapticThreshold
+								Glur2BipevenPReven[i][j][k][l].g_max = OFFBipSynapticConductance
+								BipevenPRCSTrackeven[i][j].x[k][l] = 1
+								synapse_counter = synapse_counter + 1
+								if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipevenPRCSTrackeven[i][j].x[k][l] = 2
+								}
+							} 
+						}
+					} else if(BipTrackeven.x[i][j] == 3) {
+						if(PRTrackeven.x[k][l] == 1) {
+							if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) < BipReceptiveField) {
+								if(RD_Active == 0) {
+									Glur2BipevenPReven[i][j][k][l] = new GradSyn_excite()
+									Bipeven[i][j].soma Glur2BipevenPReven[i][j][k][l].loc(0.95)
+									setpointer Glur2BipevenPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+									Glur2BipevenPReven[i][j][k][l].e = 0
+									Glur2BipevenPReven[i][j][k][l].V_thr = RodBipSynapticThreshold
+									Glur2BipevenPReven[i][j][k][l].g_max = RodBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								if(RD_Active == 1) {
+									Glur2BipevenPReven[i][j][k][l] = new GradSyn_excite_RD()
+									Bipeven[i][j].soma Glur2BipevenPReven[i][j][k][l].loc(0.95)
+									setpointer Glur2BipevenPReven[i][j][k][l].V_pre, PReven[k][l].soma.v(0.95)
+									Glur2BipevenPReven[i][j][k][l].e = 0
+									Glur2BipevenPReven[i][j][k][l].V_thr = RodBipSynapticThreshold
+									Glur2BipevenPReven[i][j][k][l].g_max = RodBipSynapticConductance
+									synapse_counter = synapse_counter + 1
+								}
+								BipevenPRCSTrackeven[i][j].x[k][l] = 1
+								if(sqrt((PRevenX.x[k][l] - BipevenX.x[i][j])^2 + (PRevenY.x[k][l] - BipevenY.x[i][j])^2) > BipReceptiveField - BipSurroundField) {
+									BipevenPRCSTrackeven[i][j].x[k][l] = 2
+								}
+							} 
+						}
+					}
+				}
+			}
+			
+		}
+	}
+	
+}
+
+proc CountAmaConnect() {
+
+	// Counter for number of ON bipolar cells connected to a single amacrine cells
+	
+	AmaoddCounter = new Matrix(AmaX, AmaY)
+	AmaevenCounter = new Matrix(AmaX + 1, AmaY - 1)
+	for i = 0, AmaX - 1 {
+		for j = 0, AmaY - 1 {
+			if(AmaTrackodd.x[i][j] == 1) {
+				for k = 0, BipX - 1 {
+					for l = 0, BipY - 1 {
+						if(sqrt((BipoddX.x[k][l] - AmaoddX.x[i][j])^2 + (BipoddY.x[k][l] - AmaoddY.x[i][j])^2) < AmaReceptiveField) {
+							if(BipTrackodd.x[k][l] == 1) {
+								AmaoddCounter.x[i][j] = AmaoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, BipX {
+					for l = 0, BipY - 2 {
+						if(sqrt((BipevenX.x[k][l] - AmaoddX.x[i][j])^2 + (BipevenY.x[k][l] - AmaoddY.x[i][j])^2) < AmaReceptiveField) {
+							if(BipTrackeven.x[k][l] == 1) {
+								AmaoddCounter.x[i][j] = AmaoddCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	for i = 0, AmaX {
+		for j = 0, AmaY - 2 {
+			if(AmaTrackeven.x[i][j] == 1) {
+				for k = 0, BipX - 1 {
+					for l = 0, BipY - 1 {
+						if(sqrt((BipoddX.x[k][l] - AmaevenX.x[i][j])^2 + (BipoddY.x[k][l] - AmaevenY.x[i][j])^2) < AmaReceptiveField) {
+							if(BipTrackodd.x[k][l] == 1) {
+								AmaevenCounter.x[i][j] = AmaevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+				
+				for k = 0, BipX {
+					for l = 0, BipY - 2 {
+						if(sqrt((BipevenX.x[k][l] - AmaevenX.x[i][j])^2 + (BipevenY.x[k][l] - AmaevenY.x[i][j])^2) < AmaReceptiveField) {
+							if(BipTrackeven.x[k][l] == 1) {
+								AmaevenCounter.x[i][j] = AmaevenCounter.x[i][j] + 1
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Clamp cells that do not have a connection to ON bipolar at below threshold voltage
+	for i = 0, AmaX - 1 {
+		for j = 0, AmaY - 1 {
+			if(AmaoddCounter.x[i][j] == 0) {
+				Amaodd[i][j].soma AmaClampodd[i][j] = new VClamp(0.5)
+				AmaClampodd[i][j].dur[0] = Simul_Time
+				AmaClampodd[i][j].amp[0] = -70
+			}
+		}
+	}
+
+	for i = 0, AmaX {
+		for j = 0, AmaY - 2 {
+			if(AmaevenCounter.x[i][j] == 0) {
+				Amaeven[i][j].soma AmaClampeven[i][j] = new VClamp(0.5)
+				AmaClampeven[i][j].dur[0] = Simul_Time
+				AmaClampeven[i][j].amp[0] = -70
+			}
+		}
+	}
+}
+
+proc Ama_Synapses() {
+	// Generate Synapses for Amaodd Matrix
+	bip2amaconnecTrackodd = new Matrix(BipX, BipY)
+	bip2amaconnecTrackeven = new Matrix(BipX + 1, BipY - 1)
+	for i = 0, AmaX - 1{
+		for j = 0, AmaY - 1{
+			if(AmaTrackodd.x[i][j] == 1) {
+				// Check Bipodd Matrix
+				for k = 0, BipX - 1 {
+					for l = 0, BipY - 1{
+						if(sqrt((BipoddX.x[k][l] - AmaoddX.x[i][j])^2 + (BipoddY.x[k][l] - AmaoddY.x[i][j])^2) < AmaReceptiveField) {
+							bip2amaconnecTrackodd.x[k][l] = 1
+							if(BipTrackodd.x[k][l] == 1) {
+								AmaGapJunctions[NumAmaGapConnections] = new Gap()
+								Amaodd[i][j].IS AmaGapJunctions[NumAmaGapConnections].src(0.95)
+								Bipodd[k][l].soma AmaGapJunctions[NumAmaGapConnections].target(0.95)
+								AmaGapJunctions[NumAmaGapConnections].g(Ama2BipGap/(AmaoddCounter.x[i][j]))
+								NumAmaGapConnections = NumAmaGapConnections + 1
+							} else if(BipTrackodd.x[k][l] == 2) {
+								Glur2AmaoddBipodd[i][j][k][l] =  new GradSyn_ama_bip_inhibit()
+								Bipodd[k][l].soma Glur2AmaoddBipodd[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaoddBipodd[i][j][k][l].V_pre, Amaodd[i][j].soma.v(0.95)
+								Glur2AmaoddBipodd[i][j][k][l].e = 0
+								Glur2AmaoddBipodd[i][j][k][l].V_thr = Ama2ConeOFFBipThreshold
+								Glur2AmaoddBipodd[i][j][k][l].g_max = -AmaSynapticConductance
+								synapse_counter = synapse_counter + 1
+							} else if(BipTrackodd.x[k][l] == 3) {
+								Glur2AmaoddBipodd[i][j][k][l] =  new GradSyn_bip_ama_excite()
+								Amaodd[i][j].soma Glur2AmaoddBipodd[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaoddBipodd[i][j][k][l].V_pre, Bipodd[k][l].soma.v(0.95)
+								Glur2AmaoddBipodd[i][j][k][l].e = 0
+								Glur2AmaoddBipodd[i][j][k][l].V_thr = RodBip2AmaSynapticThreshold
+								Glur2AmaoddBipodd[i][j][k][l].g_max = RodBip2AmaSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+				
+				// Check Bipeven Matrix
+				for k = 0, BipX  {
+					for l = 0, BipY - 2 {
+						if(sqrt((BipevenX.x[k][l] - AmaoddX.x[i][j])^2 + (BipevenY.x[k][l] - AmaoddY.x[i][j])^2) < AmaReceptiveField) {
+							bip2amaconnecTrackeven.x[k][l] = 1
+							if(BipTrackeven.x[k][l] == 1) {
+								AmaGapJunctions[NumAmaGapConnections] = new Gap()
+								Amaodd[i][j].IS AmaGapJunctions[NumAmaGapConnections].src(0.95)
+								Bipeven[k][l].soma AmaGapJunctions[NumAmaGapConnections].target(0.95)
+								AmaGapJunctions[NumAmaGapConnections].g(Ama2BipGap/(AmaoddCounter.x[i][j]))
+								NumAmaGapConnections = NumAmaGapConnections + 1
+							} else if(BipTrackeven.x[k][l] == 2) {
+								Glur2AmaoddBipeven[i][j][k][l] =  new GradSyn_ama_bip_inhibit()
+								Bipeven[k][l].soma Glur2AmaoddBipeven[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaoddBipeven[i][j][k][l].V_pre, Amaodd[i][j].soma.v(0.95)
+								Glur2AmaoddBipeven[i][j][k][l].e = 0
+								Glur2AmaoddBipeven[i][j][k][l].V_thr = Ama2ConeOFFBipThreshold
+								Glur2AmaoddBipeven[i][j][k][l].g_max = -AmaSynapticConductance
+								synapse_counter = synapse_counter + 1
+							} else if(BipTrackeven.x[k][l] == 3) {
+								Glur2AmaoddBipeven[i][j][k][l] =  new GradSyn_bip_ama_excite()
+								Amaodd[i][j].soma Glur2AmaoddBipeven[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaoddBipeven[i][j][k][l].V_pre, Bipeven[k][l].soma.v(0.95)
+								Glur2AmaoddBipeven[i][j][k][l].e = 0
+								Glur2AmaoddBipeven[i][j][k][l].V_thr = RodBip2AmaSynapticThreshold
+								Glur2AmaoddBipeven[i][j][k][l].g_max = RodBip2AmaSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+				
+				// Check for GanOFF in Ganodd Matrix
+				for k = 0, GanX - 1 {
+					for l = 0, GanY - 1 {
+						if(sqrt((GanoddX.x[k][l] - AmaoddX.x[i][j])^2 + (GanoddY.x[k][l] - AmaoddY.x[i][j])^2) < AmaReceptiveField) {
+							if(GanTrackodd.x[k][l] == 2) {
+								Glur2AmaoddGanodd[i][j][k][l] = new GradSyn_ama_gan_inhibit()
+								Ganodd[k][l].soma Glur2AmaoddGanodd[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaoddGanodd[i][j][k][l].V_pre, Amaodd[i][j].soma.v(0.95)
+								Glur2AmaoddGanodd[i][j][k][l].e = 0
+								Glur2AmaoddGanodd[i][j][k][l].V_thr = AmaSynapticThreshold
+								Glur2AmaoddGanodd[i][j][k][l].g_max = -Ama2GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+				
+				// Check for GanOFF in Ganeven Matrix
+				for k = 0, GanX {
+					for l = 0, GanY - 2 {
+						if(sqrt((GanevenX.x[k][l] - AmaoddX.x[i][j])^2 + (GanevenY.x[k][l] - AmaoddY.x[i][j])^2) < AmaReceptiveField) {
+							if(GanTrackeven.x[k][l] == 2) {
+								Glur2AmaoddGaneven[i][j][k][l] = new GradSyn_ama_gan_inhibit()
+								Ganeven[k][l].soma Glur2AmaoddGaneven[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaoddGaneven[i][j][k][l].V_pre, Amaodd[i][j].soma.v(0.95)
+								Glur2AmaoddGaneven[i][j][k][l].e = 0
+								Glur2AmaoddGaneven[i][j][k][l].V_thr = AmaSynapticThreshold
+								Glur2AmaoddGaneven[i][j][k][l].g_max = -Ama2GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+				
+			}
+		}
+	}
+	
+	// Generate Synapses for Amaeven Matrix
+	for i = 0, AmaX  {
+		for j = 0, AmaY - 2 {
+			if(AmaTrackeven.x[i][j] == 1) {
+				// Check Bipodd Matrix
+				for k = 0, BipX - 1 {
+					for l = 0, BipY - 1 {
+						if(sqrt((BipoddX.x[k][l] - AmaevenX.x[i][j])^2 + (BipoddY.x[k][l] - AmaevenY.x[i][j])^2) < AmaReceptiveField) {
+							bip2amaconnecTrackodd.x[k][l] = 1
+							if(BipTrackodd.x[k][l] == 1) {
+								AmaGapJunctions[NumAmaGapConnections] = new Gap()
+								Amaeven[i][j].IS AmaGapJunctions[NumAmaGapConnections].src(0.95)
+								Bipodd[k][l].soma AmaGapJunctions[NumAmaGapConnections].target(0.95)
+								AmaGapJunctions[NumAmaGapConnections].g(Ama2BipGap/(AmaevenCounter.x[i][j]))
+								NumAmaGapConnections = NumAmaGapConnections + 1
+							} else if(BipTrackodd.x[k][l] == 2) {
+								Glur2AmaevenBipodd[i][j][k][l] =  new GradSyn_ama_bip_inhibit()
+								Bipodd[k][l].soma Glur2AmaevenBipodd[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaevenBipodd[i][j][k][l].V_pre, Amaeven[i][j].soma.v(0.95)
+								Glur2AmaevenBipodd[i][j][k][l].e = 0
+								Glur2AmaevenBipodd[i][j][k][l].V_thr = Ama2ConeOFFBipThreshold
+								Glur2AmaevenBipodd[i][j][k][l].g_max = -AmaSynapticConductance
+								synapse_counter = synapse_counter + 1
+							} else if(BipTrackodd.x[k][l] == 3) {
+								Glur2AmaevenBipodd[i][j][k][l] =  new GradSyn_bip_ama_excite()
+								Amaeven[i][j].soma Glur2AmaevenBipodd[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaevenBipodd[i][j][k][l].V_pre, Bipodd[k][l].soma.v(0.95)
+								Glur2AmaevenBipodd[i][j][k][l].e = 0
+								Glur2AmaevenBipodd[i][j][k][l].V_thr = RodBip2AmaSynapticThreshold
+								Glur2AmaevenBipodd[i][j][k][l].g_max = RodBip2AmaSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+				
+				// Check Bipeven Matrix
+				for k = 0, BipX  {
+					for l = 0, BipY - 2 {
+						if(sqrt((BipevenX.x[k][l] - AmaevenX.x[i][j])^2 + (BipevenY.x[k][l] - AmaevenY.x[i][j])^2) < AmaReceptiveField) {
+							bip2amaconnecTrackeven.x[k][l] = 1
+							if(BipTrackeven.x[k][l] == 1) {
+								AmaGapJunctions[NumAmaGapConnections] = new Gap()
+								Amaeven[i][j].IS AmaGapJunctions[NumAmaGapConnections].src(0.95)
+								Bipeven[k][l].soma AmaGapJunctions[NumAmaGapConnections].target(0.95)
+								AmaGapJunctions[NumAmaGapConnections].g(Ama2BipGap/(AmaevenCounter.x[i][j]))
+								NumAmaGapConnections = NumAmaGapConnections + 1
+							} else if(BipTrackeven.x[k][l] == 2) {
+								Glur2AmaevenBipeven[i][j][k][l] =  new GradSyn_ama_bip_inhibit()
+								Bipeven[k][l].soma Glur2AmaevenBipeven[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaevenBipeven[i][j][k][l].V_pre, Amaeven[i][j].soma.v(0.95)
+								Glur2AmaevenBipeven[i][j][k][l].e = 0
+								Glur2AmaevenBipeven[i][j][k][l].V_thr = Ama2ConeOFFBipThreshold
+								Glur2AmaevenBipeven[i][j][k][l].g_max = -AmaSynapticConductance
+								synapse_counter = synapse_counter + 1
+							} else if(BipTrackeven.x[k][l] == 3) {
+								Glur2AmaevenBipeven[i][j][k][l] =  new GradSyn_bip_ama_excite()
+								Amaeven[i][j].soma Glur2AmaevenBipeven[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaevenBipeven[i][j][k][l].V_pre, Bipeven[k][l].soma.v(0.95)
+								Glur2AmaevenBipeven[i][j][k][l].e = 0
+								Glur2AmaevenBipeven[i][j][k][l].V_thr = RodBip2AmaSynapticThreshold
+								Glur2AmaevenBipeven[i][j][k][l].g_max = RodBip2AmaSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+				
+				// Check for GanOFF in Ganodd Matrix
+				for k = 0, GanX - 1 {
+					for l = 0, GanY - 1 {
+						if(sqrt((GanoddX.x[k][l] - AmaevenX.x[i][j])^2 + (GanoddY.x[k][l] - AmaevenY.x[i][j])^2) < AmaReceptiveField) {
+							if(GanTrackodd.x[k][l] == 2) {
+								Glur2AmaevenGanodd[i][j][k][l] = new GradSyn_ama_gan_inhibit()
+								Ganodd[k][l].soma Glur2AmaevenGanodd[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaevenGanodd[i][j][k][l].V_pre, Amaeven[i][j].soma.v(0.95)
+								Glur2AmaevenGanodd[i][j][k][l].e = 0
+								Glur2AmaevenGanodd[i][j][k][l].V_thr = AmaSynapticThreshold
+								Glur2AmaevenGanodd[i][j][k][l].g_max = -Ama2GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+				
+				// Check for GanOFF in Ganeven Matrix
+				for k = 0, GanX {
+					for l = 0, GanY - 2 {
+						if(sqrt((GanevenX.x[k][l] - AmaevenX.x[i][j])^2 + (GanevenY.x[k][l] - AmaevenY.x[i][j])^2) < AmaReceptiveField) {
+							if(GanTrackeven.x[k][l] == 2) {
+								Glur2AmaevenGaneven[i][j][k][l] = new GradSyn_ama_gan_inhibit()
+								Ganeven[k][l].soma Glur2AmaevenGaneven[i][j][k][l].loc(0.95)
+								setpointer Glur2AmaevenGaneven[i][j][k][l].V_pre, Amaeven[i][j].soma.v(0.95)
+								Glur2AmaevenGaneven[i][j][k][l].e = 0
+								Glur2AmaevenGaneven[i][j][k][l].V_thr = AmaSynapticThreshold
+								Glur2AmaevenGaneven[i][j][k][l].g_max = -Ama2GanSynapticConductance
+								synapse_counter = synapse_counter + 1
+							}
+						}
+					}
+				}
+				
+			}
+		}
+	}
+	
+}
+
+proc CountHorizConnect() {
+
+	// Counter for number of cones connected to Horizontal Cells
+	
+	HorizontaloddCounter = new Matrix(HorizontalX, HorizontalY)
+	HorizontalevenCounter = new Matrix(HorizontalX + 1, HorizontalY - 1)
+	for i = 0, HorizontalX - 1 {
+		for j = 0, HorizontalY - 1 {
+			for k = 0, PRX - 1 {
+				for l = 0, PRY - 1 {
+					if(sqrt((HorizontaloddX.x[i][j] - PRoddX.x[k][l])^2 + (HorizontaloddY.x[i][j] - PRoddY.x[k][l])^2) < HorizontalReceptiveField) {
+						if(PRTrackodd.x[k][l] == 2) {
+							HorizontaloddCounter.x[i][j] = HorizontaloddCounter.x[i][j] + 1
+						}
+					}
+				}
+			}
+			
+			for k = 0, PRX {
+				for l = 0, PRY - 2 {
+					if(sqrt((HorizontaloddX.x[i][j] - PRevenX.x[k][l])^2 + (HorizontaloddY.x[i][j] - PRevenY.x[k][l])^2) < HorizontalReceptiveField) {
+						if(PRTrackeven.x[k][l] == 2) {
+							HorizontaloddCounter.x[i][j] = HorizontaloddCounter.x[i][j] + 1
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	for i = 0, HorizontalX {
+		for j = 0, HorizontalY - 2 {
+			for k = 0, PRX - 1 {
+				for l = 0, PRY - 1 {
+					if(sqrt((HorizontalevenX.x[i][j] - PRoddX.x[k][l])^2 + (HorizontalevenY.x[i][j] - PRoddY.x[k][l])^2) < HorizontalReceptiveField) {
+						if(PRTrackodd.x[k][l] == 2) {
+							HorizontalevenCounter.x[i][j] = HorizontalevenCounter.x[i][j] + 1
+						}
+					}
+				}
+			}
+			
+			for k = 0, PRX {
+				for l = 0, PRY - 2 {
+					if(sqrt((HorizontalevenX.x[i][j] - PRevenX.x[k][l])^2 + (HorizontalevenY.x[i][j] - PRevenY.x[k][l])^2) < HorizontalReceptiveField) {
+						if(PRTrackeven.x[k][l] == 2) {
+							HorizontalevenCounter.x[i][j] = HorizontalevenCounter.x[i][j] + 1
+						}
+					}
+				}
+			}
+		}
+	}
+	
+}
+	
+proc Horizon_synapses() {
+	// Generate synapses between Cones and Horizontal Cells
+	
+	for i = 0, HorizontalX - 1 {
+		for j = 0, HorizontalY - 1 {
+			for k = 0, PRX - 1 {
+				for l = 0, PRY - 1 {
+					if(sqrt((HorizontaloddX.x[i][j] - PRoddX.x[k][l])^2 + (HorizontaloddY.x[i][j] - PRoddY.x[k][l])^2) < HorizontalReceptiveField) {
+						//Rod to be included
+						if(PRTrackodd.x[k][l] == 2) {
+							// Synapse for excitation of Horizontal Cell from Cone
+							pc1 = new ParallelContext()
+							Horizontalodd[i][j].soma Glur2HorizontaloddPRodd[i][j][k][l] = new Synapse_HorPR(0.5)
+							synapse_counter = synapse_counter + 1
+							PRodd[k][l].soma pc1.source_var(&v(0.5), SVCounter)
+							SVCounter = SVCounter + 1
+							Horizontalodd[i][j].soma pc1.target_var(Glur2HorizontaloddPRodd[i][j][k][l], &Glur2HorizontaloddPRodd[i][j][k][l].V_pre, TVCounter)
+							TVCounter = TVCounter + 1
+							{ pc1.setup_transfer() }
+							Glur2HorizontaloddPRodd[i][j][k][l].v_th = HorizontalEXSynapticThreshold
+							Glur2HorizontaloddPRodd[i][j][k][l].v_slope = 5
+							Glur2HorizontaloddPRodd[i][j][k][l].g_max = HorizontalEXSynapticConductance/HorizontaloddCounter.x[i][j]
+							
+							// Synapse for inhibition of Cones from Horizontal Cell
+							pc1 = new ParallelContext()
+							PRodd[k][l].soma Glur2PRoddHorizontalodd[k][l][i][j] = new Synapse_HorPR(0.5)
+							synapse_counter = synapse_counter + 1
+							Horizontalodd[i][j].soma pc1.source_var(&v(0.5), SVCounter)
+							SVCounter = SVCounter + 1
+							PRodd[k][l].soma pc1.target_var(Glur2PRoddHorizontalodd[k][l][i][j], &Glur2PRoddHorizontalodd[k][l][i][j].V_pre, TVCounter)
+							TVCounter = TVCounter + 1
+							{ pc1.setup_transfer() }
+							Glur2PRoddHorizontalodd[k][l][i][j].v_th = HorizontalINSynapticThreshold
+							Glur2PRoddHorizontalodd[k][l][i][j].v_slope = 5
+							Glur2PRoddHorizontalodd[k][l][i][j].g_max = HorizontalINSynapticConductance
+						}
+					}
+				}
+			}
+			
+			for k = 0, PRX {
+				for l = 0, PRY - 2 {
+					if(sqrt((HorizontaloddX.x[i][j] - PRevenX.x[k][l])^2 + (HorizontaloddY.x[i][j] - PRevenY.x[k][l])^2) < HorizontalReceptiveField) {
+						if(PRTrackeven.x[k][l] == 2) {
+							// Synapse for excitation of Horizontal Cell from Cone
+							pc1 = new ParallelContext()
+							Horizontalodd[i][j].soma Glur2HorizontaloddPReven[i][j][k][l] = new Synapse_HorPR(0.5)
+							synapse_counter = synapse_counter + 1
+							PReven[k][l].soma pc1.source_var(&v(0.5), SVCounter)
+							SVCounter = SVCounter + 1
+							Horizontalodd[i][j].soma pc1.target_var(Glur2HorizontaloddPReven[i][j][k][l], &Glur2HorizontaloddPReven[i][j][k][l].V_pre, TVCounter)
+							TVCounter = TVCounter + 1
+							{ pc1.setup_transfer() }
+							Glur2HorizontaloddPReven[i][j][k][l].v_th = HorizontalEXSynapticThreshold
+							Glur2HorizontaloddPReven[i][j][k][l].v_slope = 5
+							Glur2HorizontaloddPReven[i][j][k][l].g_max = HorizontalEXSynapticConductance/HorizontaloddCounter.x[i][j]
+							
+							// Synapse for inhibition of Cones from Horizontal Cell
+							pc1 = new ParallelContext()
+							PReven[k][l].soma Glur2PRevenHorizontalodd[k][l][i][j] = new Synapse_HorPR(0.5)
+							synapse_counter = synapse_counter + 1
+							Horizontalodd[i][j].soma pc1.source_var(&v(0.5), SVCounter)
+							SVCounter = SVCounter + 1
+							PReven[k][l].soma pc1.target_var(Glur2PRevenHorizontalodd[k][l][i][j], &Glur2PRevenHorizontalodd[k][l][i][j].V_pre, TVCounter)
+							TVCounter = TVCounter + 1
+							{ pc1.setup_transfer() }
+							Glur2PRevenHorizontalodd[k][l][i][j].v_th = HorizontalINSynapticThreshold
+							Glur2PRevenHorizontalodd[k][l][i][j].v_slope = 5
+							Glur2PRevenHorizontalodd[k][l][i][j].g_max = HorizontalINSynapticConductance
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	for i = 0, HorizontalX {
+		for j = 0, HorizontalY - 2 {
+			for k = 0, PRX - 1 {
+				for l = 0, PRY - 1 {
+					if(sqrt((HorizontalevenX.x[i][j] - PRoddX.x[k][l])^2 + (HorizontalevenY.x[i][j] - PRoddY.x[k][l])^2) < HorizontalReceptiveField) {
+						if(PRTrackodd.x[k][l] == 2) {
+							// Synapse for excitation of Horizontal Cell from Cone
+							pc1 = new ParallelContext()
+							Horizontaleven[i][j].soma Glur2HorizontalevenPRodd[i][j][k][l] = new Synapse_HorPR(0.5)
+							synapse_counter = synapse_counter + 1
+							PRodd[k][l].soma pc1.source_var(&v(0.5), SVCounter)
+							SVCounter = SVCounter + 1
+							Horizontaleven[i][j].soma pc1.target_var(Glur2HorizontalevenPRodd[i][j][k][l], &Glur2HorizontalevenPRodd[i][j][k][l].V_pre, TVCounter)
+							TVCounter = TVCounter + 1
+							{ pc1.setup_transfer() }
+							Glur2HorizontalevenPRodd[i][j][k][l].v_th = HorizontalEXSynapticThreshold
+							Glur2HorizontalevenPRodd[i][j][k][l].v_slope = 5
+							Glur2HorizontalevenPRodd[i][j][k][l].g_max = HorizontalEXSynapticConductance/HorizontalevenCounter.x[i][j]
+							
+							// Synapse for inhibition of Cones from Horizontal Cell
+							pc1 = new ParallelContext()
+							PRodd[k][l].soma Glur2PRoddHorizontaleven[k][l][i][j] = new Synapse_HorPR(0.5)
+							synapse_counter = synapse_counter + 1
+							Horizontaleven[i][j].soma pc1.source_var(&v(0.5), SVCounter)
+							SVCounter = SVCounter + 1
+							PRodd[k][l].soma pc1.target_var(Glur2PRoddHorizontaleven[k][l][i][j], &Glur2PRoddHorizontaleven[k][l][i][j].V_pre, TVCounter)
+							TVCounter = TVCounter + 1
+							{ pc1.setup_transfer() }
+							Glur2PRoddHorizontaleven[k][l][i][j].v_th = HorizontalINSynapticThreshold
+							Glur2PRoddHorizontaleven[k][l][i][j].v_slope = 5
+							Glur2PRoddHorizontaleven[k][l][i][j].g_max = HorizontalINSynapticConductance
+						}
+					}
+				}
+			}
+			
+			for k = 0, PRX {
+				for l = 0, PRY - 2{
+					if(sqrt((HorizontalevenX.x[i][j] - PRevenX.x[k][l])^2 + (HorizontalevenY.x[i][j] - PRevenY.x[k][l])^2) < HorizontalReceptiveField) {
+						if(PRTrackeven.x[k][l] == 2) {
+							pc1 = new ParallelContext()
+							Horizontaleven[i][j].soma Glur2HorizontalevenPReven[i][j][k][l] = new Synapse_HorPR(0.5)
+							synapse_counter = synapse_counter + 1
+							PReven[k][l].soma pc1.source_var(&v(0.5), SVCounter)
+							SVCounter = SVCounter + 1
+							Horizontaleven[i][j].soma pc1.target_var(Glur2HorizontalevenPReven[i][j][k][l], &Glur2HorizontalevenPReven[i][j][k][l].V_pre, TVCounter)
+							TVCounter = TVCounter + 1
+							{ pc1.setup_transfer() }
+							Glur2HorizontalevenPReven[i][j][k][l].v_th = HorizontalEXSynapticThreshold
+							Glur2HorizontalevenPReven[i][j][k][l].v_slope = 5
+							Glur2HorizontalevenPReven[i][j][k][l].g_max = HorizontalEXSynapticConductance/HorizontalevenCounter.x[i][j]
+							
+							// Synapse for inhibition of Cones from Horizontal Cell
+							pc1 = new ParallelContext()
+							PReven[k][l].soma Glur2PRevenHorizontaleven[k][l][i][j] = new Synapse_HorPR(0.5)
+							synapse_counter = synapse_counter + 1
+							Horizontaleven[i][j].soma pc1.source_var(&v(0.5), SVCounter)
+							SVCounter = SVCounter + 1
+							PReven[k][l].soma pc1.target_var(Glur2PRevenHorizontaleven[k][l][i][j], &Glur2PRevenHorizontaleven[k][l][i][j].V_pre, TVCounter)
+							TVCounter = TVCounter + 1
+							{ pc1.setup_transfer() }
+							Glur2PRevenHorizontaleven[k][l][i][j].v_th = HorizontalINSynapticThreshold
+							Glur2PRevenHorizontaleven[k][l][i][j].v_slope = 5
+							Glur2PRevenHorizontaleven[k][l][i][j].g_max = HorizontalINSynapticConductance
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	
+	
+}
+
+//--------------------------------------------------------
+// ------------------INSERT INPUT-------------------------
+//--------------------------------------------------------
+
+proc Create_Input() {
+	
+	// Create input for Odd Matrix
+	for i = 0, PRX - 1 {
+		for j = 0, PRY - 1 {
+			if(PRTrackodd.x[i][j] == 1) {
+				PRodd[i][j].soma darkinput_rododd[i][j] = new IinjLTDim(0.5)
+				darkinput_rododd[i][j].amp = 0
+				darkinput_rododd[i][j].ssI = 0
+				darkinput_rododd[i][j].del = 0
+				darkinput_rododd[i][j].ton = Simul_Time
+				
+				PRodd[i][j].soma brightinput_rododd[i][j] = new IinjLT(0.5)
+				brightinput_rododd[i][j].amp = RodStimAmp
+				brightinput_rododd[i][j].ssI = 40
+				brightinput_rododd[i][j].del = RodStimDel
+				brightinput_rododd[i][j].ton = RodStimTime
+				brightinput_rododd[i][j].num = 1
+			}
+			
+			if(PRTrackodd.x[i][j] == 2) {
+				PRodd[i][j].soma darkinput_coneodd[i][j] = new IinjLT_cone(0.5)
+				darkinput_coneodd[i][j].amp = 0
+				darkinput_coneodd[i][j].ssI = 20
+				darkinput_coneodd[i][j].del = 0
+				darkinput_coneodd[i][j].ton = Simul_Time
+				
+				PRodd[i][j].soma brightinput_coneodd[i][j] = new IinjLT_cone(0.5)
+				brightinput_coneodd[i][j].amp = ConeStimAmp
+				brightinput_coneodd[i][j].ssI = 0
+				brightinput_coneodd[i][j].del = ConeStimDel
+				brightinput_coneodd[i][j].ton = ConeStimTime
+				brightinput_coneodd[i][j].num = 1
+			}
+		}
+	}
+	
+	for i = 0, PRX {
+		for j = 0, PRY - 2 {
+			if(PRTrackeven.x[i][j] == 1) {
+				PReven[i][j].soma darkinput_rodeven[i][j] = new IinjLTDim(0.5)
+				darkinput_rodeven[i][j].amp = 0
+				darkinput_rodeven[i][j].ssI = 0
+				darkinput_rodeven[i][j].del = 0
+				darkinput_rodeven[i][j].ton = Simul_Time
+				
+				PReven[i][j].soma brightinput_rodeven[i][j] = new IinjLT(0.5)
+				brightinput_rodeven[i][j].amp = RodStimAmp
+				brightinput_rodeven[i][j].ssI = 40
+				brightinput_rodeven[i][j].del = RodStimDel
+				brightinput_rodeven[i][j].ton = RodStimTime
+				brightinput_rodeven[i][j].num = 1
+			}
+			
+			if(PRTrackeven.x[i][j] == 2) {
+				PReven[i][j].soma darkinput_coneeven[i][j] = new IinjLT_cone(0.5)
+				darkinput_coneeven[i][j].amp = 0
+				darkinput_coneeven[i][j].ssI = 20
+				darkinput_coneeven[i][j].del = 0
+				darkinput_coneeven[i][j].ton = Simul_Time
+				
+				PReven[i][j].soma brightinput_coneeven[i][j] = new IinjLT_cone(0.5)
+				brightinput_coneeven[i][j].amp = ConeStimAmp
+				brightinput_coneeven[i][j].ssI = 0
+				brightinput_coneeven[i][j].del = ConeStimDel
+				brightinput_coneeven[i][j].ton = ConeStimTime
+				brightinput_coneeven[i][j].num = 1
+			}
+		}
+	}
+	
+}
+
+//---------------------------------------------------------
+// ------------------INSERT CLAMPS-------------------------
+//---------------------------------------------------------
+
+proc Create_Clamps() {
+	/*
+	// Create VClamps for Photoreceptors
+	for i = 0, PRX - 1 {
+		for j = 0, PRY - 1 {
+			PRodd[i][j].soma PRClampodd[i][j] = new VClamp(0.5)
+			if(PRTrackodd.x[i][j] == 1) {
+				PRClampodd[i][j].dur[0] = 1000
+				PRClampodd[i][j].amp[0] = SSRod
+			}
+			if(PRTrackodd.x[i][j] == 2) {
+				PRClampodd[i][j].dur[0] = 1000
+				PRClampodd[i][j].amp[0] = SSCone
+			}
+		}
+	}
+	
+	for i = 0, PRX {
+		for j = 0, PRY - 2 {
+			PReven[i][j].soma PRClampeven[i][j] = new VClamp(0.5)
+			if(PRTrackeven.x[i][j] == 1) {
+				PRClampeven[i][j].dur[0] = 1000
+				PRClampeven[i][j].amp[0] = SSRod
+			}
+			if(PRTrackeven.x[i][j] == 2) {
+				PRClampeven[i][j].dur[0] = 1000
+				PRClampeven[i][j].amp[0] = SSCone
+			}
+		}
+	}
+	
+	// Create VClamps for Horizontal Cells
+	for i = 0, HorizontalX - 1 {
+		for j = 0, HorizontalY - 1 {
+			Horizontalodd[i][j].soma HorizontalClampodd[i][j] = new VClamp(0.5)
+			HorizontalClampodd[i][j].dur[0] = 1000
+			HorizontalClampodd[i][j].amp[0] = SSHorizontal
+		}
+	}
+	
+	for i = 0, HorizontalX {
+		for j = 0, HorizontalY - 2 {
+			Horizontaleven[i][j].soma HorizontalClampeven[i][j] = new VClamp(0.5)
+			HorizontalClampeven[i][j].dur[0] = 1000
+			HorizontalClampeven[i][j].amp[0] = SSHorizontal
+		}
+	}
+	
+	// Create VClamps for Bipolar Cells
+	for i = 0, BipX - 1 {
+		for j = 0, BipY - 1 {
+			Bipodd[i][j].soma BipClampodd[i][j] = new VClamp(0.5)
+			if(BipTrackodd.x[i][j] == 1) {
+				BipClampodd[i][j].dur[0] = 1000
+				BipClampodd[i][j].amp[0] = SSConeONBipolar
+			}
+			if(BipTrackodd.x[i][j] == 2) {
+				BipClampodd[i][j].dur[0] = 1000
+				BipClampodd[i][j].amp[0] = SSConeOFFBipolar
+			}
+			if(BipTrackodd.x[i][j] == 3) {
+				BipClampodd[i][j].dur[0] = 1000
+				BipClampodd[i][j].amp[0] = SSRodONBipolar
+			}
+		}
+	}
+	
+	for i = 0, BipX {
+		for j = 0, BipY - 2 {
+			Bipeven[i][j].soma BipClampeven[i][j] = new VClamp(0.5)
+			if(BipTrackeven.x[i][j] == 1) {
+				BipClampeven[i][j].dur[0] = 1000
+				BipClampeven[i][j].amp[0] = SSConeONBipolar
+			}
+			if(BipTrackeven.x[i][j] == 2) {
+				BipClampeven[i][j].dur[0] = 1000
+				BipClampeven[i][j].amp[0] = SSConeOFFBipolar
+			}
+			if(BipTrackeven.x[i][j] == 3) {
+				BipClampeven[i][j].dur[0] = 1000
+				BipClampeven[i][j].amp[0] = SSRodONBipolar
+			}
+		}
+	}
+	
+	// Create VClamps for Amacrine Cells
+	for i = 0, AmaX - 1 {
+		for j = 0, AmaY - 1 {
+			if(AmaTrackodd.x[i][j] == 1) {
+				Amaodd[i][j].soma AmaClampodd[i][j] = new VClamp(0.5)
+				AmaClampodd[i][j].dur[0] = 1000
+				AmaClampodd[i][j].amp[0] = SSAmacrine
+			}
+		}
+	}
+	
+	for i = 0, AmaX {
+		for j = 0, AmaY - 2 {
+			if(AmaTrackeven.x[i][j] == 1) {
+				Amaeven[i][j].soma AmaClampeven[i][j] = new VClamp(0.5)
+				AmaClampeven[i][j].dur[0] = 1000
+				AmaClampeven[i][j].amp[0] = SSAmacrine
+			}
+		}
+	}
+	*/
+	// Create VClamps for Ganglion Cells
+	for i = 0, GanX - 1 {
+		for j = 0, GanY - 1 {
+			Ganodd[i][j].soma GanClampodd[i][j] = new VClamp(0.5)
+			if(GanTrackodd.x[i][j] == 1) {
+				GanClampodd[i][j].dur[0] = Simul_Time
+				GanClampodd[i][j].amp[0] = SSONGanglion
+			}
+			if(GanTrackodd.x[i][j] == 2) {
+				GanClampodd[i][j].dur[0] = Simul_Time
+				GanClampodd[i][j].amp[0] = SSOFFGanglion
+			}
+		}
+	}
+	
+	for i = 0, GanX {
+		for j = 0, GanY - 2 {
+			Ganeven[i][j].soma GanClampeven[i][j] = new VClamp(0.5)
+			if(GanTrackeven.x[i][j] == 1) {
+				GanClampeven[i][j].dur[0] = Simul_Time
+				GanClampeven[i][j].amp[0] = SSONGanglion
+			}
+			if(GanTrackeven.x[i][j] == 2) {
+				GanClampeven[i][j].dur[0] = Simul_Time
+				GanClampeven[i][j].amp[0] = SSOFFGanglion
+			}
+		}
+	}
+ 
+}
+
+//----------------------------------------------------------
+// ------------------Check ON OFF SYNAPSES------------------
+//----------------------------------------------------------
+
+proc Check_recepfield() {
+
+	GanConnecONodd = new Matrix(BipX + 1, BipY - 1)
+	GanConnecONeven = new Matrix(BipX, BipY - 2)
+	GanConnecOFF = new Matrix(BipX + 1, BipY - 1)
+	GanConnecAmaOFF = new Matrix(AmaX + 1, AmaY - 1)
+	GanConnecAma21odd = new Matrix(GanX, GanY)
+	GanConnecAma21even = new Matrix(GanX + 1, GanY - 1)
+
+	for i = 0, BipX - 1 {
+		for j = 0, BipY - 1 {																						// ON Cell
+			if(sqrt((BipoddX.x[i][j] - GanevenX.x[3][0])^2 + (BipoddY.x[i][j] - GanevenY.x[3][0])^2) < GanConeReceptiveField) {
+				if(BipTrackodd.x[i][j] == 1) {
+					GanConnecONodd.x[i][j] = 1
+				}
+			}
+		}	
+	}
+
+	for i = 0, BipX {
+		for j = 0, BipY - 2 {																						// ON Cell
+			if(sqrt((BipevenX.x[i][j] - GanevenX.x[3][0])^2 + (BipevenY.x[i][j] - GanevenY.x[3][0])^2) < GanConeReceptiveField) {
+				if(BipTrackeven.x[i][j] == 1) {
+					GanConnecONeven.x[i][j] = 1
+				}
+			}
+		}	
+	}
+	
+	for i = 0, BipX - 1 {
+		for j = 0, BipY - 1 {																						// OFF Cell
+			if(sqrt((BipoddX.x[i][j] - GanoddX.x[2][1])^2 + (BipoddY.x[i][j] - GanoddY.x[2][1])^2) < GanConeReceptiveField) {
+				if(BipTrackodd.x[i][j] == 2) {
+					GanConnecOFF.x[i][j] = 1
+				}
+			}
+		}	
+	}
+	
+	for i = 0, AmaX - 1 {
+		for j = 0, AmaY - 1 {
+			if(sqrt((GanoddX.x[2][1] - AmaoddX.x[i][j])^2 + (GanoddY.x[2][1] - AmaoddY.x[i][j])^2) < AmaReceptiveField) {
+				GanConnecAmaOFF.x[i][j] = 1
+			}
+		}
+	}
+
+	for i = 0, GanX - 1 {
+		for j = 0, GanY - 1 {
+			if(sqrt((AmaoddX.x[2][1] - GanoddX.x[i][j])^2 + (AmaoddY.x[2][1] - GanoddY.x[i][j])^2) < AmaReceptiveField) {
+				GanConnecAma21odd.x[i][j] = 1
+			}
+		}
+	}
+	
+	for i = 0, GanX {
+		for j = 0, GanY - 2 {
+			if(sqrt((AmaoddX.x[2][1] - GanevenX.x[i][j])^2 + (AmaoddY.x[2][1] - GanevenY.x[i][j])^2) < AmaReceptiveField) {
+				GanConnecAma21even.x[i][j] = 1
+			}
+		}
+	}
+}
+
+//-------------------------------------------------
+// ------------------PRINT-------------------------
+//-------------------------------------------------
+
+proc Counting() {
+	
+	print "The total number of Cones is:"
+	print NumCone
+	print "The total number of Rods is:"
+	print NumRod
+	print "The total number of Horizontal Cells is:"
+	print NumHorizontal
+	print "The total number of Bipolar Cells is:"
+	print NumTotalBip
+	print "Total ON Biplolar Cells"
+	print NumONBip
+	print "Total OFF Biplolar Cells"
+	print NumOFFBip
+	print "Total Rod Biplolar Cells"
+	print NumRodBip
+	print "The total number of AII Amacrine Cells is:"
+	print NumAII
+	print "The total number of Ganglion Cells is:"
+	print NumTotalGan
+	print "Total ON Ganglion Cells"
+	print NumONGan
+	print "Total OFF Ganglion Cells"
+	print NumOFFGan
+	
+}
+
+//--------------------------------------------------------------------------------
+// ------------------RECORD AND SAVE VECTORS AND MATRICES-------------------------
+//--------------------------------------------------------------------------------
+
+proc record_Matrix() {
+
+	// Save Photoreceptor Tracking Matrices
+	savPRTrackodd = new File()
+	savPRTrackodd.wopen("Outputs/Tracking_Matrices/PRTrackodd.csv")
+	PRTrackodd.fprint(savPRTrackodd)
+	savPRTrackodd.close()
+	
+	savPRTrackeven = new File()
+	savPRTrackeven.wopen("Outputs/Tracking_Matrices/PRTrackeven.csv")
+	PRTrackeven.fprint(savPRTrackeven)
+	savPRTrackeven.close()
+
+	// Save Bipolar Tracking Matrices
+	savBipTrackodd = new File()
+	savBipTrackodd.wopen("Outputs/Tracking_Matrices/BipTrackodd.csv")
+	BipTrackodd.fprint(savBipTrackodd)
+	savBipTrackodd.close()
+	
+	savBipTrackeven = new File()
+	savBipTrackeven.wopen("Outputs/Tracking_Matrices/BipTrackeven.csv")
+	BipTrackeven.fprint(savBipTrackeven)
+	savBipTrackeven.close()
+	
+	// Save Amacrine Tracking Matrices
+	savAmaTrackodd = new File() 
+	savAmaTrackodd.wopen("Outputs/Tracking_Matrices/AmaTrackodd.csv")
+	AmaTrackodd.fprint(savAmaTrackodd)
+	savAmaTrackodd.close()
+	
+	savAmaTrackeven = new File() 
+	savAmaTrackeven.wopen("Outputs/Tracking_Matrices/AmaTrackeven.csv")
+	AmaTrackeven.fprint(savAmaTrackeven)
+	savAmaTrackeven.close()
+	
+	// Save Ganglion Tracking Matrices
+	savGanTrackodd = new File()
+	savGanTrackodd.wopen("Outputs/Tracking_Matrices/GanTrackodd.csv")
+	GanTrackodd.fprint(savGanTrackodd)
+	savGanTrackodd.close()
+	
+	savGanTrackeven = new File()
+	savGanTrackeven.wopen("Outputs/Tracking_Matrices/GanTrackeven.csv")
+	GanTrackeven.fprint(savGanTrackeven)
+	savGanTrackeven.close()
+	
+	// Save Bipolar to Amacrine Cell Connection Matrix
+	savbip2amaconnecTrackodd = new File()
+	savbip2amaconnecTrackodd.wopen("Outputs/Tracking_Matrices/bip2amaconnecTrackodd.csv")
+	bip2amaconnecTrackodd.fprint(savbip2amaconnecTrackodd)
+	savbip2amaconnecTrackodd.close()
+	
+	savbip2amaconnecTrackeven = new File()
+	savbip2amaconnecTrackeven.wopen("Outputs/Tracking_Matrices/bip2amaconnecTrackeven.csv")
+	bip2amaconnecTrackeven.fprint(savbip2amaconnecTrackeven)
+	savbip2amaconnecTrackeven.close()
+	
+	// Save Photoreceptor Position Matrices
+	savPRoddX = new File()
+	savPRoddX.wopen("Outputs/Tracking_Matrices/PRoddX.csv")
+	PRoddX.fprint(savPRoddX)
+	savPRoddX.close()
+	
+	savPRoddY = new File()
+	savPRoddY.wopen("Outputs/Tracking_Matrices/PRoddY.csv")
+	PRoddY.fprint(savPRoddY)
+	savPRoddY.close()
+	
+	savPRevenX = new File()
+	savPRevenX.wopen("Outputs/Tracking_Matrices/PRevenX.csv")
+	PRevenX.fprint(savPRevenX)
+	savPRevenX.close()
+	
+	savPRevenY = new File()
+	savPRevenY.wopen("Outputs/Tracking_Matrices/PRevenY.csv")
+	PRevenY.fprint(savPRevenY)
+	savPRevenY.close()
+	
+	// Save Bipolar Position Matrices
+	savBipoddX = new File()
+	savBipoddX.wopen("Outputs/Tracking_Matrices/BipoddX.csv")
+	BipoddX.fprint(savBipoddX)
+	savBipoddX.close()
+	
+	savBipoddY = new File()
+	savBipoddY.wopen("Outputs/Tracking_Matrices/BipoddY.csv")
+	BipoddY.fprint(savBipoddY)
+	savBipoddY.close()
+	
+	savBipevenX = new File()
+	savBipevenX.wopen("Outputs/Tracking_Matrices/BipevenX.csv")
+	BipevenX.fprint(savBipevenX)
+	savBipevenX.close()
+	
+	savBipevenY = new File()
+	savBipevenY.wopen("Outputs/Tracking_Matrices/BipevenY.csv")
+	BipevenY.fprint(savBipevenY)
+	savBipevenY.close()
+	
+	// Save Ganglion Position Matrices
+	savGanoddX = new File()
+	savGanoddX.wopen("Outputs/Tracking_Matrices/GanoddX.csv")
+	GanoddX.fprint(savGanoddX)
+	savGanoddX.close()
+	
+	savGanoddY = new File()
+	savGanoddY.wopen("Outputs/Tracking_Matrices/GanoddY.csv")
+	GanoddY.fprint(savGanoddY)
+	savGanoddY.close()	
+	
+	savGanevenX = new File()
+	savGanevenX.wopen("Outputs/Tracking_Matrices/GanevenX.csv")
+	GanevenX.fprint(savGanevenX)
+	savGanevenX.close()
+	
+	savGanevenY = new File()
+	savGanevenY.wopen("Outputs/Tracking_Matrices/GanevenY.csv")
+	GanevenY.fprint(savGanevenY)
+	savGanevenY.close()
+	
+	//Save Bip Cell Connection Matrices
+	savONCBCoddCount = new File()
+	savONCBCoddCount.wopen("Outputs/Tracking_Matrices/ONCBCoddCount.csv")
+	ONCBCoddCounter.fprint(savONCBCoddCount)
+	savONCBCoddCount.close()
+	
+	savONCBCevenCount = new File()
+	savONCBCevenCount.wopen("Outputs/Tracking_Matrices/ONCBCevenCount.csv")
+	ONCBCevenCounter.fprint(savONCBCevenCount)
+	savONCBCevenCount.close()
+
+	savOFFCBCoddCount = new File()
+	savOFFCBCoddCount.wopen("Outputs/Tracking_Matrices/OFFCBCoddCount.csv")
+	OFFCBCoddCounter.fprint(savOFFCBCoddCount)
+	savOFFCBCoddCount.close()
+	
+	savOFFCBCevenCount = new File()
+	savOFFCBCevenCount.wopen("Outputs/Tracking_Matrices/OFFCBCevenCount.csv")
+	OFFCBCevenCounter.fprint(savOFFCBCevenCount)
+	savOFFCBCevenCount.close()
+
+	savRBCoddCount = new File()
+	savRBCoddCount.wopen("Outputs/Tracking_Matrices/RBCoddCount.csv")
+	RBCoddCounter.fprint(savRBCoddCount)
+	savRBCoddCount.close()
+	
+	savRBCevenCount = new File()
+	savRBCevenCount.wopen("Outputs/Tracking_Matrices/RBCevenCount.csv")
+	RBCevenCounter.fprint(savRBCevenCount)
+	savRBCevenCount.close()
+
+	//Save Horizontal Cell Connection Matrices
+	savHoroddCount = new File()
+	savHoroddCount.wopen("Outputs/Tracking_Matrices/HoroddCount.csv")
+	HorizontaloddCounter.fprint(savHoroddCount)
+	savHoroddCount.close()
+	
+	savHorevenCount = new File()
+	savHorevenCount.wopen("Outputs/Tracking_Matrices/HorevenCount.csv")
+	HorizontalevenCounter.fprint(savHorevenCount)
+	savHorevenCount.close()
+	
+	//Save Amacrine Cell Connection Matrices
+	savAmaoddCount = new File()
+	savAmaoddCount.wopen("Outputs/Tracking_Matrices/AmaoddCount.csv")
+	AmaoddCounter.fprint(savAmaoddCount)
+	savAmaoddCount.close()
+	
+	savAmaevenCount = new File()
+	savAmaevenCount.wopen("Outputs/Tracking_Matrices/AmaevenCount.csv")
+	AmaevenCounter.fprint(savAmaevenCount)
+	savAmaevenCount.close()
+
+	//Save Ganglion Cell Connection Matrices
+	savONRGCoddCount = new File()
+	savONRGCoddCount.wopen("Outputs/Tracking_Matrices/ONRGCoddCount.csv")
+	ONRGCoddCounter.fprint(savONRGCoddCount)
+	savONRGCoddCount.close()
+	
+	savONRGCevenCount = new File()
+	savONRGCevenCount.wopen("Outputs/Tracking_Matrices/ONRGCevenCount.csv")
+	ONRGCevenCounter.fprint(savONRGCevenCount)
+	savONRGCevenCount.close()
+
+	savOFFRGCoddCount = new File()
+	savOFFRGCoddCount.wopen("Outputs/Tracking_Matrices/OFFRGCoddCount.csv")
+	OFFRGCoddCounter.fprint(savOFFRGCoddCount)
+	savOFFRGCoddCount.close()
+	
+	savOFFRGCevenCount = new File()
+	savOFFRGCevenCount.wopen("Outputs/Tracking_Matrices/OFFRGCevenCount.csv")
+	OFFRGCevenCounter.fprint(savOFFRGCevenCount)
+	savOFFRGCevenCount.close()
+	
+	savGanConnecONodd = new File()
+	savGanConnecONodd.wopen("Outputs/Tracking_Matrices/GanConnecONodd.csv")
+	GanConnecONodd.fprint(savGanConnecONodd)
+	savGanConnecONodd.close()
+
+	savGanConnecONeven = new File()
+	savGanConnecONeven.wopen("Outputs/Tracking_Matrices/GanConnecONeven.csv")
+	GanConnecONeven.fprint(savGanConnecONeven)
+	savGanConnecONeven.close()
+
+	savGanConnecOFF = new File()
+	savGanConnecOFF.wopen("Outputs/Tracking_Matrices/GanConnecOFF.csv")
+	GanConnecOFF.fprint(savGanConnecOFF)
+	savGanConnecOFF.close()
+
+	savGanConnecAmaOFF = new File()
+	savGanConnecAmaOFF.wopen("Outputs/Tracking_Matrices/GanConnecAmaOFF.csv")
+	GanConnecAmaOFF.fprint(savGanConnecAmaOFF)
+	savGanConnecAmaOFF.close()
+
+	savGanConnecAma21odd = new File()
+	savGanConnecAma21odd.wopen("Outputs/Tracking_Matrices/GanConnecAma21odd.csv")
+	GanConnecAma21odd.fprint(savGanConnecAma21odd)
+	savGanConnecAma21odd.close()
+
+	savGanConnecAma21even = new File()
+	savGanConnecAma21even.wopen("Outputs/Tracking_Matrices/GanConnecAma21even.csv")
+	GanConnecAma21even.fprint(savGanConnecAma21even)
+	savGanConnecAma21even.close()
+}
+
+proc record_Response() {
+
+	// Record time
+	rect = new Vector()
+	rect.record(&t, Sample_time)
+	savt = new File()
+	savt.wopen("Outputs/Responses/t.csv")
+	
+	// Record Cone Output
+	recCone = new Vector()
+	recCone.record(&PRodd[15][15].soma.v(0.5), Sample_time)
+	savCone = new File()
+	savCone.wopen("Outputs/Responses/Cone.csv")
+	
+	// Record Rod Output
+	recRod = new Vector()
+	recRod.record(&PRodd[3][7].soma.v(0.5), Sample_time)
+	savRod = new File()
+	savRod.wopen("Outputs/Responses/Rod.csv")
+	
+	// Record Horizontal Cell Output
+	recHorizon = new Vector()
+	recHorizon.record(&Horizontaleven[1][0].soma.v(0.5), Sample_time)
+	savHorizon = new File()
+	savHorizon.wopen("Outputs/Responses/Horizontal.csv")
+	
+	// Record Cone ON Bipolar Cell Output
+	recONBip = new Vector()
+	recONBip.record(&Bipodd[5][3].soma.v(0.5), Sample_time)
+	savONBip = new File()
+	savONBip.wopen("Outputs/Responses/ONConebip.csv")
+	
+	//Record Cone OFF Bipolar Cell Output
+	recOFFBip = new Vector()
+	recOFFBip.record(&Bipodd[5][4].soma.v(0.5), Sample_time)
+	savOFFBip = new File()
+	savOFFBip.wopen("Outputs/Responses/OFFConebip.csv")
+	
+	// Record Rod Bipolar Cell Output
+	recRodBip = new Vector()
+	recRodBip.record(&Bipeven[9][2].soma.v(0.5), Sample_time)
+	savRodBip = new File()
+	savRodBip.wopen("Outputs/Responses/Rodbip.csv")
+	
+	// Record A2 Amacrine Cell Output
+	recA2 = new Vector()
+	recA2.record(&Amaodd[2][1].soma.v(0.5), Sample_time)
+	savA2 = new File()
+	savA2.wopen("Outputs/Responses/A2.csv")
+	
+	// Record ON Ganglion Cell Output
+	recONGan = new Vector()
+	recONGan.record(&Ganeven[3][0].soma.v(0.5), Sample_time)
+	savONGan = new File()
+	savONGan.wopen("Outputs/Responses/ONGan.csv")
+	
+	// Record OFF Ganglion Cell Output
+	recOFFGan = new Vector()
+	recOFFGan.record(&Ganodd[1][2].soma.v(0.5), Sample_time)
+	savOFFGan = new File()
+	savOFFGan.wopen("Outputs/Responses/OFFGan.csv")
+	
+/* 	// Record ON Ganglion Cell Excitatory SYNAPSES
+	recONGanExc = new Vector()
+	recONGanExc.record(&Glur2GanevenBipodd[3][0][6][2].i, Sample_time)
+	savONGanExc = new File()
+	savONGanExc.wopen("Outputs/Responses/ONGanExcSyn.csv")
+	
+	// Record OFF Ganglion Cell Excitatory SYNAPSES
+	recOFFGanExc = new Vector()
+	recOFFGanExc.record(&Glur2GanoddBipodd[2][1][5][4].i, Sample_time)
+	savOFFGanExc = new File()
+	savOFFGanExc.wopen("Outputs/Responses/OFFGanExcSyn.csv")
+	
+	// Record OFF Ganglion Cell Inhibitory SYNAPSES
+	recOFFGanInh = new Vector()
+	recOFFGanInh.record(&Glur2AmaoddGanodd[2][1][2][1].i, Sample_time)
+	savOFFGanInh = new File()
+	savOFFGanInh.wopen("Outputs/Responses/OFFGanInhSyn.csv") */
+	
+}
+
+proc save_Response() {
+
+	// Save time
+	rect.printf(savt)
+	savt.close()
+	
+	// Save Cone Output
+	recCone.printf(savCone)
+	savCone.close()
+	
+	// Sav Rod Output
+	recRod.printf(savRod)
+	savRod.close()
+	
+	//Save Horizontal Cell Output
+	recHorizon.printf(savHorizon)
+	savHorizon.close()
+	
+	//Save Cone ON Bipolar Cell Output
+	recONBip.printf(savONBip)
+	savONBip.close()
+	
+	// Save Cone OFF Bipolar Cell Output
+	recOFFBip.printf(savOFFBip)
+	savOFFBip.close()
+	
+	// Save Rod Bipolar Cell Output
+	recRodBip.printf(savRodBip)
+	savRodBip.close()
+	
+	// Save A2 Amacrine Cell Output
+	recA2.printf(savA2)
+	savA2.close()
+	
+	// Save ON Ganglion Cell Output
+	recONGan.printf(savONGan)
+	savONGan.close()
+	
+	// Save OFF Ganglion Cell Output
+	recOFFGan.printf(savOFFGan)
+	savOFFGan.close()
+	
+/* 	// Save ON Ganglion Cell Excitatory SYNAPSE
+	recONGanExc.printf(savONGanExc)
+	savONGanExc.close()
+	
+	// Save OFF Ganglion Cell Excitatory SYNAPSE
+	recOFFGanExc.printf(savOFFGanExc)
+	savOFFGanExc.close()
+	
+	// Save OFF Ganglion Cell Inhibitory SYNAPSE
+	recOFFGanInh.printf(savOFFGanInh)
+	savOFFGanInh.close() */
+	
+}
+
+proc record_Gan_Cells() {
+	strdef initialise_file
+	strdef recordGanglioncells
+	for i = 0, GanX - 1 {
+		for j = 0, GanY - 1 {
+			recGanOdd[i][j] = new Vector()
+			recGanOdd[i][j].record(&Ganodd[i][j].soma.v(0.5), Sample_time)
+			savGanOdd[i][j] = new File()
+			sprint(initialise_file, "Outputs/Responses/Gan_Cell_Responses/Gan_Cellodd%d%d.csv", i, j)
+			sprint(recordGanglioncells, "savGanOdd[%d][%d].wopen(\"%s\")", i, j, initialise_file)
+			execute(recordGanglioncells)
+		}
+	} 
+
+	for i = 0, GanX  {
+		for j = 0, GanY - 2 {
+			recGanEven[i][j] = new Vector()
+			recGanEven[i][j].record(&Ganeven[i][j].soma.v(0.5), Sample_time)
+			savGanEven[i][j] = new File()
+			sprint(initialise_file, "Outputs/Responses/Gan_Cell_Responses/Gan_Celleven%d%d.csv", i, j)
+			sprint(recordGanglioncells, "savGanEven[%d][%d].wopen(\"%s\")", i, j, initialise_file)
+			execute(recordGanglioncells)
+		}
+	} 
+}
+
+proc save_Gan_Cells() {
+	for i = 0, GanX - 1 {
+		for j = 0, GanY - 1 {
+			recGanOdd[i][j].printf(savGanOdd[i][j])
+			savGanOdd[i][j].close()
+		}
+	}
+
+	for i = 0, GanX {
+		for j = 0, GanY - 2 {
+			recGanEven[i][j].printf(savGanEven[i][j])
+			savGanEven[i][j].close()
+		}
+	}
+}
+
+//-------------------------------------------------------------
+// ------------------Make GRAPHS-------------------------------
+//-------------------------------------------------------------
+
+ngraphs = 0
+
+proc addgraph() { local a
+	a = ngraphs 
+	
+	g[a] = new Graph()
+	g[a].size(0, Simul_Time, $2, $3)
+	g[a].xaxis()
+	g[a].yaxis()
+	g[a].addvar($s1, 1, 0)
+	
+	ngraphs = ngraphs + 1
+	
+}
+
+//----------------------------------------------------------------
+// ------------------RUN SIMULATION-------------------------------
+//----------------------------------------------------------------
+
+proc Run_Simulation() {
+
+	load_file("session3.ses")
+	run()
+
+	save_Response()
+	save_Gan_Cells()
+}
+
+//----------------------------------------------------------
+// ------------------Make GUI-------------------------------
+//----------------------------------------------------------
+
+proc make_GUI() {
+
+	xpanel("Neuron Parameters", 0)
+	xlabel("NUMBER OF CELLS")
+		xvalue("Number of Photoreceptor rows", "PRX")
+		xvalue("Number of Photoreceptor columns", "PRY")
+		xvalue("Number of Horizontal Cell rows", "HorizontalX", 2)
+		xvalue("Number of Horizontal Cell columns", "HorizontalY", 2)
+		xvalue("Number of Bipolar Cell rows", "BipX", 2)
+		xvalue("Number of Bipolar Cell columns", "BipY", 2)
+		xvalue("Number of Amacrine Cell rows", "AmaX", 2)
+		xvalue("Number of Amacrine Cell columns", "AmaY", 2)
+		xvalue("Number of Ganglion Cell rows", "GanX", 2)
+		xvalue("Number of Ganglion Cell columns", "GanY", 2)
+	xlabel("")
+	xlabel("NEURON SPACING (1 unit = 2.39 um)")
+		xvalue("Photoreceptor spacing", "PRCellSpacing")
+		xvalue("Horizontal Cell spacing", "HorizontalCellSpacing")
+		xvalue("Bipolar Cell spacing", "BipCellSpacing")
+		xvalue("Amacrine Cell spacing", "AmaCellSpacing")
+		xvalue("Ganglion Cell spacing", "GanCellSpacing")
+	xlabel("")
+	xlabel("NEURON Z POSITION")
+		xvalue("Photoreceptor Z position", "PRCellZ")
+		xvalue("Horizontal Cell Z position", "HorizontalCellZ")
+		xvalue("Bipolar Cell Z position", "BipCellZ")
+		xvalue("Amacrine Cell Z position", "AmaCellZ")
+		xvalue("Ganlion Cell Z position", "GanCellZ")
+	xlabel("")
+	xlabel("RECEPTIVE FIELD SIZES")
+		xvalue("Horizontal Cell Receptive Field radius", "HorizontalReceptiveField")
+		xvalue("Bipolar Cell Receptive Field radius", "BipReceptiveField")
+		xvalue("Amacrine Cell Receptive Field radius", "AmaReceptiveField")
+		xvalue("Rod Ganglion Cell Receptive Field radius", "GanRodReceptiveField")
+		xvalue("Cone Ganglion Cell Receptive Field radius", "GanConeReceptiveField")
+	xpanel(0, 150,0)
+	
+	xpanel("Network Parameters")
+	xlabel("GAP JUNCTIONS")
+		xvalue("Homocellular Photoreceptor Gap Junction conductance", "HomoPRGap")
+		xvalue("Heterocellular Photoreceptor Gap Junction conductance", "HeteroPRGap")
+		xvalue("Amacrine to ON Bipolar Cell Gap Junction conductance", "Ama2BipGap")
+	xlabel("")
+	xlabel("SYNAPSES")
+	xlabel("Synaptic Conductances (uS)")
+		xvalue("Horizontal Cell EX Synaptic conductance", "HorizontalEXSynapticConductance")
+		xvalue("Horizontal Cell IN Synaptic conductance", "HorizontalINSynapticConductance")
+		xvalue("Bipolar Cell Synaptic conductance", "RodBipSynapticConductance")
+		xvalue("Amacrine Cell Synaptic conductance", "AmaSynapticConductance")
+		xvalue("Ganglion Cell Synaptic conductance", "GanSynapticConductance")
+	xlabel("")
+	xlabel("Synaptic Thresholds (mV)")
+		xvalue("Horizontal Cell EX Synaptic threshold", "HorizontalEXSynapticThreshold")
+		xvalue("Horizontal Cell IN Synaptic threshold", "HorizontalINSynapticThreshold")
+		xvalue("Rod Bipolar Cell Synaptic threshold", "RodBipSynapticThreshold")
+		xvalue("Cone Bipolar Cell Synaptic threshold", "ConeBipSynapticThreshold")
+		xvalue("Amacrine Cell Synaptic threshold", "AmaSynapticThreshold")
+		xvalue("Cone ON Ganglion Cell Synaptic threshold", "ConeONGanSynapticThreshold")
+		xvalue("Cone OFF Ganglion Cell Synaptic threshold", "ConeOFFGanSynapticThreshold")
+	xpanel(365, 0, 0)
+	
+	xpanel("Stimulation Parameters")
+	xlabel("ROD STIMULATION")
+		xvalue("Rod stimulation amplitude", "RodStimAmp")
+		xvalue("Rod stimulation delay", "RodStimDel")
+		xvalue("Rod stimulation time", "RodStimTime")
+	xlabel("")
+	xlabel("CONE STIMULATION")
+		xvalue("Cone stimulation amplitude", "ConeStimAmp")
+		xvalue("Cone stimulation delay", "ConeStimDel")
+		xvalue("Cone stimulation time", "ConeStimTime")
+	xpanel(365, 660, 0)
+	
+	
+	xpanel("Simulation Parameters")
+	xlabel("Integration Time Step")
+		xvalue("dt", "Time_Step")
+	xlabel("")
+	xlabel("Simulation Time")
+		xvalue("Total Simulation time", "Simul_Time")
+	xlabel("")
+	xvalue("Real Time","realtime")
+	xlabel("")
+	xvalue("Current Time Step", "t")
+	xlabel("")
+	xbutton("Run", "Run_Simulation()")
+	xpanel(805, 0, 0)
+
+}
+

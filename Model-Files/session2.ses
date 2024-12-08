@@ -1,0 +1,67 @@
+{load_file("nrngui.hoc")}
+objectvar save_window_, rvp_
+objectvar scene_vector_[8]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+{pwman_place(0,0,0)}
+{
+save_window_ = new Graph(0)
+save_window_.size(-54.0833,1005.08,-105.267,-2.93333)
+scene_vector_[2] = save_window_
+{save_window_.view(-54.0833, -105.267, 1059.17, 102.333, 246, 510, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addvar("Ama.soma.v( 0.05 )", 1, 1, 0.626347, 0.9, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(-72.75,1039.75,-38.8972,-37.7897)
+scene_vector_[3] = save_window_
+{save_window_.view(-72.75, -38.8972, 1112.5, 1.1075, 673, 508, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addvar("Bip[0].soma.v( 0.5 )", 1, 1, 0.674251, 0.868626, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(-10,1000,-9,3)
+scene_vector_[4] = save_window_
+{save_window_.view(-10, -9, 1010, 12, 246, 864, 300.6, 200.8)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addvar("Ama.IS.ik_ika_AII_IS( 0.05 )", 3, 1, 0.545509, 0.913446, 2)
+save_window_.addvar("Ama.IS.ik_ikm_AII_IS( 0.05 )", 2, 1, 0.536527, 0.904482, 2)
+save_window_.addvar("Ama.IS.ina( 0.05 )", 4, 1, 0.698204, 0.895518, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(-26,984,-0.1427,0.1273)
+scene_vector_[5] = save_window_
+{save_window_.view(-26, -0.1427, 1010, 0.27, 672, 858, 300.6, 200.8)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addvar("Bip[0].soma.i_pas( 0.5 )", 3, 1, 0.626347, 0.92241, 2)
+save_window_.addvar("Bip[0].soma.ica( 0.5 )", 2, 1, 0.626347, 0.92241, 2)
+save_window_.addvar("Bip[0].soma.ih_ih( 0.5 )", 4, 1, 0.626347, 0.917928, 2)
+save_window_.addvar("Bip[0].soma.ik( 0.5 )", 5, 1, 0.623353, 0.908964, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,1000,-80,40)
+scene_vector_[6] = save_window_
+{save_window_.view(0, -80, 1000, 120, 246, 162, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addvar("Ama.IS.v( 0.95 )", 1, 1, 0.638323, 0.908964, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,1000,-80,40)
+scene_vector_[7] = save_window_
+{save_window_.view(0, -80, 1000, 120, 669, 165, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addvar("Ama.arm.v( 0.95 )", 1, 1, 0.674251, 0.895518, 2)
+}
+objectvar scene_vector_[1]
+{doNotify()}

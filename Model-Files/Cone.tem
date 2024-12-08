@@ -1,0 +1,32 @@
+begintemplate Cone
+
+public soma 
+create soma
+
+proc init(){ local x, y, z
+    create soma
+	if (numarg() == 3) {
+		x = $1 * 2
+		y = $2 * 2
+		z = $3
+	} else {
+		x = 0
+		y = 0
+		z = 0
+	}
+ 
+	soma {
+		{ pt3dclear() pt3dadd(x, y, z, 1) pt3dadd(x, y, z+22.7, 1) }
+		nseg=9
+		diam=10  
+		L=10/PI 
+		cm=16  
+
+		insert CPR
+		insert Kv_cone
+		insert h_cone
+
+	}
+} // end init
+
+endtemplate Cone

@@ -1,0 +1,103 @@
+begintemplate A2
+
+public soma, IS, arm
+create soma, IS, arm
+
+public all
+objref all
+
+proc init() {
+
+	// Netowrks
+	if (numarg() == 3) {
+        x = $1*2
+        y = $2*2
+        z = $3
+    } else {
+        x = 0
+        y = 0
+        z = 0
+    }
+	
+	// topology
+	soma {
+		pt3dclear() pt3dadd(x-25, y, z, 1) pt3dadd(x, y, z+5, 1)
+	}
+	IS {
+		pt3dclear() pt3dadd(x-12.5, y+12.5, z, 1) pt3dadd(x-12.5, y+47.5, z, 1)
+	}
+	arm {
+		pt3dclear() pt3dadd(x-12.5, y-12.5, z, 1) pt3dadd(x-12.5, y-14.5, z, 1)
+	}
+	
+	// Geometry
+	soma {
+		L = 25
+		diam = 25
+		nseg = 9
+	}
+	IS {
+		L = 35
+		diam = 0.3
+		nseg = 9
+	}
+	arm {
+		L = 2
+		diam = 2
+		nseg = 9
+	}
+	connect IS(1), arm(0)
+	connect arm(1), soma(0)
+	
+	// Biophysics
+	soma {
+		//insert pas
+		insert ika_AII_soma		
+		gkabar_ika_AII_soma = 0.004
+		insert ina_AII_soma		
+		gnabar_ina_AII_soma	= 0
+		insert ikm_AII_soma		
+		gkmbar_ikm_AII_soma	= 0
+		insert pas
+		g_pas = -1/12000
+		e_pas = -35
+		//insert A2_ih
+	}
+	IS {
+		insert ika_AII_IS		
+		gkabar_ika_AII_IS = 0.08
+		insert ina_AII_IS		
+		gnabar_ina_AII_IS = 0.05	//0.2
+		insert ikm_AII_IS		
+		gkmbar_ikm_AII_IS = 0.03
+		insert pas
+		g_pas = -1/40000
+		e_pas = -65
+		//insert A2_tsbp
+	}
+	arm {
+		insert ika_AII_arm		
+		gkabar_ika_AII_arm = 0
+		insert ina_AII_arm		
+		gnabar_ina_AII_arm = 0
+		insert ikm_AII_arm		
+		gkmbar_ikm_AII_arm = 0
+		insert pas
+		g_pas = -1/40000
+		e_pas = -65
+	}
+	
+	// section list
+	all = new SectionList()
+	IS all.append()
+	arm all.append()
+	soma all.append()
+	
+	// set axial resistance
+	forsec all {
+		Ra = 150	// ohm/cm2 default is 35.4
+		cm = 1		// uF
+	}
+}
+
+endtemplate A2
