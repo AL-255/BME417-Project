@@ -5,7 +5,7 @@ proc init() {
 	
 	finitialize()
 	fcurrent()
-	dt = Time_Step
+	dt = 0.1
 	
 }
 
@@ -23,10 +23,11 @@ proc start() {
 	Ama_Synapses()
 	CountHorizConnect()
 	Horizon_synapses()
-	Create_Input()
+	// Create_Input()
+	Create_Bipolar_Input()
 	//Create_Clamps()
 	Counting()
-	tstop = Simul_Time
+	tstop = 2000
 
 }
 

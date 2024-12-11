@@ -50,7 +50,7 @@ Sample_time = 0.1 // Record dt
 Count = 0
 
 // TO INCREASE NETWORK SIZE, CHANGE THIS VALUE
-PRX = 30
+PRX =30
 PRY = 30
 
 HorizontalX = int(sqrt(PRX*PRY*DensityHorizontal/(DensityCone + DensityRod)))
@@ -196,6 +196,8 @@ objref brightinput_rododd[PRX][PRY], brightinput_rodeven[PRX + 1][PRY - 1]
 objref darkinput_coneodd[PRX][PRY], darkinput_coneeven[PRX + 1][PRY - 1]
 objref brightinput_coneodd[PRX][PRY], brightinput_coneeven[PRX + 1][PRY - 1]
 
+//my object
+objref darkinput_oddBip[PRX][PRY], darkinput_evenBip[PRX + 1][PRY - 1] 
 // Gap junctions are stable at 900 ms
 RodStimAmp = 0 //40
 RodStimDel = 1300
@@ -1930,6 +1932,32 @@ proc Create_Input() {
 	
 }
 
+//--------------------------------------------------------
+// ------------------INSERT INPUT TO Bipolar-------------------------
+//--------------------------------------------------------
+proc Create_Bipolar_Input() {
+    
+    // Create input for Odd Matrix
+    for i = 0, BipX - 1 {
+        for j = 0, BipY - 1 {
+            Bipodd[i][j].soma darkinput_oddBip[i][j] = new IinjLT(0.5)
+            darkinput_oddBip[i][j].amp = 50000000 // parameter modify (pA)
+            darkinput_oddBip[i][j].ssI = 0
+            darkinput_oddBip[i][j].del = 1000
+            darkinput_oddBip[i][j].ton = 2000
+        }
+    }
+
+    for i = 0, BipX {
+        for j = 0, BipY - 2 {
+            Bipeven[i][j].soma darkinput_evenBip[i][j] = new IinjLT(0.5)
+            darkinput_evenBip[i][j].amp = 500000000 // Also here
+            darkinput_evenBip[i][j].ssI = 0
+            darkinput_evenBip[i][j].del = 1000
+            darkinput_evenBip[i][j].ton = 2000
+        }
+    }
+}
 //---------------------------------------------------------
 // ------------------INSERT CLAMPS-------------------------
 //---------------------------------------------------------
