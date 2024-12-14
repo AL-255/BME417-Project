@@ -1,0 +1,159 @@
+{load_file("nrngui.hoc")}
+objectvar save_window_, rvp_
+objectvar scene_vector_[17]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+{pwman_place(0,0,0)}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,4000,-65,-36)
+scene_vector_[2] = save_window_
+{save_window_.view(0, -65, 4000, 29, 924, 180, 307.8, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("PRodd[3][7].soma.v( 0.5 )", 1, 1, 0.612866, 0.886554, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,4000,-65,-31)
+scene_vector_[3] = save_window_
+{save_window_.view(0, -65, 4000, 34, 1386, 858, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("Bipeven[9][2].soma.v( 0.5 )", 1, 1, 0.560479, 0.864143, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,4000,-65,-10)
+scene_vector_[4] = save_window_
+{save_window_.view(0, -65, 4000, 55, 1386, 162, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("Bipodd[5][3].soma.v( 0.5 )", 1, 1, 0.563473, 0.873108, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,540,-65,-10)
+scene_vector_[5] = save_window_
+{save_window_.view(0, -65, 540, 55, 1374, 510, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("Bipodd[5][4].soma.v( 0.5 )", 1, 1, 0.569461, 0.944821, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,530,-65,32)
+scene_vector_[6] = save_window_
+{save_window_.view(0, -65, 530, 97, 1806, 738, 297, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("Ganodd[1][2].soma.v( 0.5 )", 1, 1, 0.599401, 0.891036, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,4000,-66,19)
+scene_vector_[7] = save_window_
+{save_window_.view(0, -66, 4000, 85, 1800, 348, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addvar("Ganeven[3][0].soma.v( 0.5 )", 1, 1, 0.590419, 0.92241, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,4000,-65,-39)
+scene_vector_[8] = save_window_
+{save_window_.view(0, -65, 4000, 26, 930, 534, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("PRodd[15][15].soma.v( 0.5 )", 1, 1, 0.581437, 0.9, 2)
+}
+{
+save_window_ = new PlotShape(0)
+save_window_.size(-67.3436,245.22,-76.5012,63.499)
+save_window_.variable("v")
+scene_vector_[9] = save_window_
+{save_window_.view(-67.3436, -76.5012, 312.564, 140, 366, 918, 404.1, 181)}
+fast_flush_list.append(save_window_)
+save_window_.save_name("fast_flush_list.")
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(-234,2406,-0.0307917,0.0572916)
+scene_vector_[10] = save_window_
+{save_window_.view(-234, -0.0307917, 2640, 0.0880833, 2616, 180, 610.2, 427.6)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addexpr("PRodd[15][15].soma.iCa( 0.5 )", 2, 1, 0.8, 0.9, 2)
+save_window_.addexpr("PRodd[15][15].soma.iCl( 0.5 )", 3, 1, 0.8, 0.9, 2)
+save_window_.addexpr("PRodd[15][15].soma.iKca( 0.5 )", 4, 1, 0.8, 0.9, 2)
+save_window_.addexpr("PRodd[15][15].soma.iKv( 0.5 )", 5, 1, 0.8, 0.9, 2)
+save_window_.addexpr("PRodd[15][15].soma.iKx( 0.5 )", 6, 1, 0.8, 0.849485, 2)
+save_window_.addexpr("PRodd[15][15].soma.il_Leak( 0.5 )", 8, 1, 0.8, 0.9, 2)
+save_window_.addexpr("PRodd[15][15].soma.ihyper_hyper( 0.5 )", 7, 1, 0.801475, 0.94841, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,4000,-65,0)
+scene_vector_[11] = save_window_
+{save_window_.view(0, -65, 4000, 65, 498, 534, 300.6, 189.1)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addexpr("Amaodd[2][1].soma.v( 0.5 )", 2, 1, 0.8, 0.9, 2)
+save_window_.addexpr("Amaodd[2][2].soma.v( 0.5 )", 3, 1, 0.8, 0.9, 2)
+save_window_.addexpr("Amaodd[1][2].soma.v( 0.5 )", 4, 1, 0.8, 0.9, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,4000,-75,-61)
+scene_vector_[12] = save_window_
+{save_window_.view(0, -75, 4000, 14, 930, 888, 300.6, 200.8)}
+graphList[0].append(save_window_)
+save_window_.save_name("graphList[0].")
+save_window_.addvar("Horizontalodd[1][0].soma.v( 0.5 )", 1, 1, 0.488623, 0.908964, 2)
+save_window_.addvar("Horizontalodd[0][1].soma.v( 0.5 )", 2, 1, 0.491617, 0.9, 2)
+save_window_.addvar("Horizontaleven[1][0].soma.v( 0.5 )", 3, 1, 0.485629, 0.9, 2)
+save_window_.addvar("Horizontaleven[2][0].soma.v( 0.5 )", 4, 1, 0.482635, 0.9, 2)
+}
+/* {
+save_window_ = new Graph(0)
+save_window_.size(-10,580,-0.17,0.14)
+scene_vector_[13] = save_window_
+{save_window_.view(-10, -0.17, 590, 0.31, 0, 121, 557.1, 200.8)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addvar("Glur2GanevenBipodd[3][0][6][2].i", 1, 1, 0.488623, 0.908964, 2)
+save_window_.addvar("Glur2GanoddBipodd[2][1][5][4].i", 2, 1, 0.491617, 0.9, 2)
+save_window_.addvar("Glur2AmaoddGanodd[2][1][2][1].i", 3, 1, 0.485629, 0.9, 2)
+} */
+{
+save_window_ = new Graph(0)
+save_window_.size(0,2000,-1,1)
+scene_vector_[14] = save_window_
+{save_window_.view(0, -1, 2000, 2, 1, 481, 300.6, 200.8)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addexpr("Bipeven[3][3].soma.ih_ih( 0.5 )", 1, 1, 0.551497, 0.944821, 2)
+save_window_.addexpr("Bipeven[3][3].soma.ik( 0.5 )", 2, 1, 0.548503, 0.931374, 2)
+save_window_.addexpr("Bipeven[3][3].soma.ica( 0.5 )", 3, 1, 0.542515, 0.908964, 2)
+}
+/* {
+save_window_ = new Graph(0)
+save_window_.size(0,2000,-1,1)
+scene_vector_[15] = save_window_
+{save_window_.view(0, -1, 2000, 2, 781, 121, 300.6, 200.8)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addexpr("Glur2GanoddBipodd[1][1][3][3].i", 1, 1, 0.8, 0.9, 2)
+}
+{
+save_window_ = new Graph(0)
+save_window_.size(0,2000,-1,1)
+scene_vector_[16] = save_window_
+{save_window_.view(0, -1, 2000, 2, 777, 486, 300.6, 200.8)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addexpr("Glur2GanoddBipodd[2][1][5][4].i", 1, 1, 0.8, 0.9, 2)
+save_window_.addexpr("Glur2AmaoddGanodd[2][1][2][1].i", 1, 1, 0.8, 0.9, 2)
+} */
+objectvar scene_vector_[1]
+{doNotify()}

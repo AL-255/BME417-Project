@@ -2,3 +2,5 @@
 *.stackdump
 *.dll
 x86_64/
+Outputs/
+*.csv
