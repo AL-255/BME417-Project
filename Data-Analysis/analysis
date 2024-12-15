@@ -1,0 +1,162 @@
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from pathlib import Path
+
+# For multiple files in a loop
+sample_file = "Run1_1211Outputs/Gan_Celleven00.csv"  # Updated path
+sample_df = pd.read_csv(sample_file)
+row_length = len(sample_df)
+
+# Initialize array with zeros
+# First dimension: max possible files (6*10=60)
+# Second dimension: length of each column
+#Run_one = np.zeros((60, row_length))
+
+#c = 0
+#for i in range(6):  # 0 to 5
+#    for j in range(10):  # 0 to 9
+##        filename = f"Run1_1211Outputs/Gan_Celleven{i}{j}.csv"  # Updated path
+#         try:
+#             df = pd.read_csv(filename)
+#             print(f"\n{filename}:")
+#             print(f"Shape: {df.shape}")
+#             Run_one[c] = df.iloc[:, 0].values  # Store first column in array
+#             c += 1
+#         except:
+#             continue
+        
+# for i in range(6):  # 0 to 5
+#     for j in range(10):  # 0 to 9
+#         filename = f"Run1_1211Outputs/Gan_Cellodd{i}{j}.csv"  # Updated path
+#         try:
+#             df = pd.read_csv(filename)
+#             print(f"\n{filename}:")
+#             print(f"Shape: {df.shape}")
+#             Run_one[c] = df.iloc[:, 0].values  # Store first column in array
+#             c += 1
+#         except:
+#             continue
+
+
+# Trim unused rows if needed
+
+
+
+def read_ganglion_data(directory, output_array):
+    """
+    Reads all ganglion cell CSV files (even and odd) from directory into output array.
+    
+    Parameters:
+    directory (str): Path to directory containing CSV files
+    output_array (numpy array): Pre-initialized array to store the data
+    
+    Returns:
+    numpy array: Filled and trimmed array containing data from all files
+    """
+    c = 0
+    
+    # Read even-numbered cells
+    for i in range(6):  # 0 to 5
+        for j in range(10):  # 0 to 9
+            filename = f"{directory}/Gan_Celleven{i}{j}.csv"
+            try:
+                df = pd.read_csv(filename)
+                output_array[c] = df.iloc[:, 0].values  # Store first column in array
+                c += 1
+            except:
+                continue
+    
+    # Read odd-numbered cells
+    for i in range(6):  # 0 to 5
+        for j in range(10):  # 0 to 9
+            filename = f"{directory}/Gan_Cellodd{i}{j}.csv"
+            try:
+                df = pd.read_csv(filename)
+                output_array[c] = df.iloc[:, 0].values  # Store first column in array
+                c += 1
+            except:
+                continue
+    
+    # Trim unused rows if needed
+    output_array = output_array[:c]
+    print(f"Final array shape: {output_array.shape}")
+    
+    return output_array
+
+# Example usage:
+# First create the output array
+sample_df = pd.read_csv("Run1_1211Outputs/Gan_Celleven00.csv")
+row_length = len(sample_df)
+Run_one = np.zeros((120, row_length))  # 120 possible files (60 even + 60 odd)
+Run_two = np.zeros((120, row_length))  # 120 possible files (60 even + 60 odd)
+Run_three = np.zeros((120, row_length))  # 120 possible files (60 even + 60 odd)
+Run_four = np.zeros((120, row_length)) 
+Run_nine = np.zeros((120, row_length)) 
+Run_ten = np.zeros((120, row_length)) 
+Run_eleven = np.zeros((120, row_length)) 
+Run_twelve = np.zeros((120, row_length)) 
+
+
+
+# Call the function
+Run_one = read_ganglion_data("Run1_1211Outputs", Run_one)
+Run_two = read_ganglion_data("Run2_1211Outputs", Run_two)
+Run_three = read_ganglion_data("Run3_1211Outputs", Run_three)
+Run_four = read_ganglion_data("Run4_1211Outputs", Run_four)
+Run_nine = read_ganglion_data("Run9_1211Outputs", Run_nine)
+Run_ten = read_ganglion_data("Run10_1211Outputs", Run_ten)
+Run_eleven = read_ganglion_data("Run11_1211Outputs", Run_eleven)
+Run_twelve = read_ganglion_data("Run12_1211Outputs", Run_twelve)
+
+data = [Run_twelve, Run_eleven,Run_ten,Run_nine, Run_one,Run_two, Run_three, Run_four ]
+
+P_array = np.zeros((8,100))
+Active = 0
+
+for array_i in range(len(data)):
+    for i in range(10000, 20000, 100):
+        Active = 0
+        for row_index in range(31):
+            window = data[array_i][row_index, i:i+100]  # Changed to i+10 to get 10 points
+            if np.any(window > 0):
+                Active += 1
+        P_array[array_i, int((i-10000)/100)] = Active / 31  # Added int() for index conversion
+
+print(f"P_array shape: {P_array.shape}")
+
+labels = ['500 pA', '5nA', '50 nA', '500 nA', '5 uA', '50uA', '500 uA', '5 mA']
+plt.figure(figsize=(12, 6))
+x_times = np.arange(1000, 2000, 10)  # Create time points
+for i in range(8):
+    plt.plot(x_times, P_array[i, :], label=labels[i])
+
+plt.title('Active Cell Fraction Over Time')
+plt.xlabel('Time (ms)')
+plt.ylabel('Fraction of Active Cells')
+plt.legend(loc='lower right')
+plt.grid(True)
+plt.show()
+
+log_array = np.zeros((1, 8))  # Fixed array shape specification
+for i in range(8):
+    log_array[0, i] = np.mean(P_array[i])
+    
+    
+stim_amps = np.array([500e-12, 5e-9, 50e-9, 500e-9, 5e-6, 50e-6, 500e-6, 5e-3])
+log_stim = np.log10(stim_amps)
+
+plt.figure(figsize=(10, 6))
+plt.plot(log_stim, log_array[0,:], 'bo-')  # Blue dots connected by lines
+plt.grid(True)
+
+# Set x-axis tick labels to show actual values
+plt.xticks(log_stim, labels, rotation=45)
+
+plt.title('Mean Cell Activation vs Stimulation Amplitude')
+plt.xlabel('Stimulation Amplitude')
+plt.ylabel('Mean Fraction of Active Cells')
+
+plt.tight_layout()  # Adjust layout to prevent label cutoff
+plt.show()
