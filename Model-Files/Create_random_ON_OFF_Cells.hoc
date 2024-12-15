@@ -1941,8 +1941,8 @@ proc Create_Bipolar_Input() {
     for i = 0, BipX - 1 {
         for j = 0, BipY - 1 {
             Bipodd[i][j].soma darkinput_oddBip[i][j] = new IinjLT(0.5)
-            darkinput_oddBip[i][j].amp = 25 // parameter modify (pA)
-            darkinput_oddBip[i][j].ssI = 25
+            darkinput_oddBip[i][j].amp  = 25 // parameter modify (pA)
+            darkinput_oddBip[i][j].ssI  = 25
             darkinput_oddBip[i][j].del  = 0
             darkinput_oddBip[i][j].ton  = 0.1
             darkinput_oddBip[i][j].toff = 0.1
@@ -1952,8 +1952,8 @@ proc Create_Bipolar_Input() {
     for i = 0, BipX {
         for j = 0, BipY - 2 {
             Bipeven[i][j].soma darkinput_evenBip[i][j] = new IinjLT(0.5)
-            darkinput_evenBip[i][j].amp = 50 // parameter modify (pA)
-            darkinput_evenBip[i][j].ssI = 50
+            darkinput_evenBip[i][j].amp  = 50 // parameter modify (pA)
+            darkinput_evenBip[i][j].ssI  = 50
             darkinput_evenBip[i][j].del  = 0
             darkinput_evenBip[i][j].ton  = 0.1
             darkinput_evenBip[i][j].toff = 0.1
